@@ -1,0 +1,36 @@
+{
+  "kind": "critical_path",
+  "input": {
+    "nodes": [
+      {
+        "id": "a",
+        "estimatedMinutes": 0
+      },
+      {
+        "id": "b"
+      },
+      {
+        "id": "c",
+        "estimatedMinutes": 5
+      }
+    ],
+    "edges": [
+      {
+        "ticketId": "c",
+        "dependsOnId": "a"
+      },
+      {
+        "ticketId": "a",
+        "dependsOnId": "b"
+      }
+    ]
+  },
+  "expected": {
+    "path": [
+      "b",
+      "a",
+      "c"
+    ],
+    "minutes": 7
+  }
+}

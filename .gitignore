@@ -1,0 +1,34 @@
+# --- Local-only planning docs (milestone breakdowns; not published) ---
+planner/
+
+# --- Throwaway CLI/TUI prototype (milestone 02 mock; not published) ---
+playground/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local SQLite databases / config
+*.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.specsmither/
+
+# Node (only used by tools/gen_*_golden.mjs to regenerate golden fixtures)
+node_modules/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

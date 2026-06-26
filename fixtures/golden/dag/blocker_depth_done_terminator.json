@@ -1,0 +1,40 @@
+{
+  "kind": "blocker_depth",
+  "input": {
+    "nodes": [
+      {
+        "id": "a",
+        "status": "pending"
+      },
+      {
+        "id": "b",
+        "status": "pending"
+      },
+      {
+        "id": "c",
+        "status": "pending"
+      },
+      {
+        "id": "d",
+        "status": "done"
+      }
+    ],
+    "edges": [
+      {
+        "ticketId": "a",
+        "dependsOnId": "b"
+      },
+      {
+        "ticketId": "b",
+        "dependsOnId": "c"
+      },
+      {
+        "ticketId": "c",
+        "dependsOnId": "d"
+      }
+    ]
+  },
+  "expected": {
+    "maxDepth": 2
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "kind": "build_tree",
+  "input": {
+    "specificationId": "spec-1",
+    "previousVersion": 0,
+    "epics": [
+      {
+        "id": "e1",
+        "epicNumber": 1,
+        "title": "Epic One",
+        "status": "in_progress"
+      },
+      {
+        "id": "e2",
+        "epicNumber": 2,
+        "title": "Epic Two",
+        "status": "todo"
+      }
+    ],
+    "tickets": [
+      {
+        "id": "t1",
+        "ticketNumber": 1,
+        "title": "T1",
+        "status": "done",
+        "epicId": "e1",
+        "estimatedMinutes": 30
+      },
+      {
+        "id": "t2",
+        "ticketNumber": 3,
+        "title": "T2",
+        "status": "ready",
+        "epicId": "e1",
+        "estimatedMinutes": 60
+      },
+      {
+        "id": "t3",
+        "ticketNumber": 4,
+        "title": "T3",
+        "status": "pending",
+        "epicId": "e2",
+        "estimatedMinutes": 45
+      },
+      {
+        "id": "t4",
+        "ticketNumber": 2,
+        "title": "T4",
+        "status": "ready",
+        "epicId": "e2",
+        "estimatedMinutes": 20
+      },
+      {
+        "id": "t5",
+        "ticketNumber": 5,
+        "title": "T5",
+        "status": "pending",
+        "epicId": "e2",
+        "estimatedMinutes": 15
+      }
+    ],
+    "dependencies": [
+      {
+        "ticketId": "t2",
+        "dependsOnId": "t1"
+      },
+      {
+        "ticketId": "t3",
+        "dependsOnId": "t2"
+      }
+    ]
+  },
+  "expected": {
+    "specificationId": "spec-1",
+    "epics": [
+      {
+        "id": "e1",
+        "epicNumber": 1,
+        "title": "Epic One",
+        "ticketIds": [
+          "t1",
+          "t2"
+        ]
+      },
+      {
+        "id": "e2",
+        "epicNumber": 2,
+        "title": "Epic Two",
+        "ticketIds": [
+          "t4",
+          "t3",
+          "t5"
+        ]
+      }
+    ],
+    "tickets": {
+      "t1": {
+        "id": "t1",
+        "ticketNumber": 1,
+        "title": "T1",
+        "status": "done",
+        "epicId": "e1",
+        "epicNumber": 1,
+        "dependencies": [],
+        "blocks": [
+          "t2"
+        ],
+        "isReady": false,
+        "blockerCount": 0,
+        "unsatisfiedDeps": [],
+        "estimatedMinutes": 30
+      },
+      "t2": {
+        "id": "t2",
+        "ticketNumber": 3,
+        "title": "T2",
+        "status": "ready",
+        "epicId": "e1",
+        "epicNumber": 1,
+        "dependencies": [
+          "t1"
+        ],
+        "blocks": [
+          "t3"
+        ],
+        "isReady": true,
+        "blockerCount": 0,
+        "unsatisfiedDeps": [],
+        "estimatedMinutes": 60
+      },
+      "t3": {
+        "id": "t3",
+        "ticketNumber": 4,
+        "title": "T3",
+        "status": "pending",
+        "epicId": "e2",
+        "epicNumber": 2,
+        "dependencies": [
+          "t2"
+        ],
+        "blocks": [],
+        "isReady": false,
+        "blockerCount": 1,
+        "unsatisfiedDeps": [
+          "t2"
+        ],
+        "estimatedMinutes": 45
+      },
+      "t4": {
+        "id": "t4",
+        "ticketNumber": 2,
+        "title": "T4",
+        "status": "ready",
+        "epicId": "e2",
+        "epicNumber": 2,
+        "dependencies": [],
+        "blocks": [],
+        "isReady": true,
+        "blockerCount": 0,
+        "unsatisfiedDeps": [],
+        "estimatedMinutes": 20
+      },
+      "t5": {
+        "id": "t5",
+        "ticketNumber": 5,
+        "title": "T5",
+        "status": "pending",
+        "epicId": "e2",
+        "epicNumber": 2,
+        "dependencies": [],
+        "blocks": [],
+        "isReady": true,
+        "blockerCount": 0,
+        "unsatisfiedDeps": [],
+        "estimatedMinutes": 15
+      }
+    },
+    "summary": {
+      "totalTickets": 5,
+      "ticketsByStatus": {
+        "pending": 2,
+        "ready": 2,
+        "active": 0,
+        "done": 1
+      },
+      "readyTickets": [
+        "t4",
+        "t2",
+        "t5"
+      ],
+      "blockedTickets": [
+        "t3"
+      ],
+      "hasCircularDeps": false,
+      "criticalPathLength": 2,
+      "criticalPathMinutes": 105,
+      "maxBlockerDepth": 1,
+      "criticalPath": [
+        {
+          "id": "t2",
+          "ticketNumber": 3,
+          "title": "T2",
+          "estimatedMinutes": 60
+        },
+        {
+          "id": "t3",
+          "ticketNumber": 4,
+          "title": "T3",
+          "estimatedMinutes": 45
+        }
+      ],
+      "estimatedMinutesTotal": 170
+    },
+    "criticalPath": [
+      {
+        "id": "t2",
+        "ticketNumber": 3,
+        "title": "T2",
+        "estimatedMinutes": 60
+      },
+      {
+        "id": "t3",
+        "ticketNumber": 4,
+        "title": "T3",
+        "estimatedMinutes": 45
+      }
+    ],
+    "edges": [
+      {
+        "from": "t2",
+        "to": "t1"
+      },
+      {
+        "from": "t3",
+        "to": "t2"
+      }
+    ],
+    "cycles": []
+  }
+}

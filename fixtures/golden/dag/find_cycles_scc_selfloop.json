@@ -1,0 +1,54 @@
+{
+  "kind": "find_cycles",
+  "input": {
+    "nodeIds": [
+      "a",
+      "b",
+      "iso",
+      "s",
+      "x",
+      "y",
+      "z"
+    ],
+    "edges": [
+      {
+        "ticketId": "a",
+        "dependsOnId": "b"
+      },
+      {
+        "ticketId": "b",
+        "dependsOnId": "a"
+      },
+      {
+        "ticketId": "s",
+        "dependsOnId": "s"
+      },
+      {
+        "ticketId": "x",
+        "dependsOnId": "y"
+      },
+      {
+        "ticketId": "y",
+        "dependsOnId": "z"
+      },
+      {
+        "ticketId": "z",
+        "dependsOnId": "x"
+      }
+    ]
+  },
+  "expected": [
+    [
+      "a",
+      "b"
+    ],
+    [
+      "s"
+    ],
+    [
+      "x",
+      "y",
+      "z"
+    ]
+  ]
+}
