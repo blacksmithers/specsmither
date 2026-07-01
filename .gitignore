@@ -25,6 +25,10 @@ htmlcov/
 *.sqlite3-shm
 .specsmither/
 
+# Dev-only uv overrides (e.g. an editable ../crucible source) — kept local so
+# CI + published builds resolve crucible-forge from PyPI.
+uv.toml
+
 # Node (only used by tools/gen_*_golden.mjs to regenerate golden fixtures)
 node_modules/
 

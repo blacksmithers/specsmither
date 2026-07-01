@@ -183,27 +183,15 @@ wheels = [
 [[package]]
 name = "crucible-forge"
 version = "0.1.0"
-source = { editable = "../crucible" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.6" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "typing-extensions", specifier = ">=4.12" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "hypothesis", specifier = ">=6.100" },
-    { name = "mypy", specifier = ">=1.10" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "ruff", specifier = ">=0.6" },
-    { name = "types-pyyaml", specifier = ">=6.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/74/23/ce5d3c2861251b8af8e24e45a32aabeebb18c2f6edd49609f770f990b4f4/crucible_forge-0.1.0.tar.gz", hash = "sha256:a789780d04ef20040fb1471f5c564b1610c83bcff30f1f70144dbc258f63d37a", size = 68730, upload-time = "2026-06-25T20:47:24.762Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/81/e4e702de550087bf70afa325814778f1aa094bc5b5f271dbcc01482bc675/crucible_forge-0.1.0-py3-none-any.whl", hash = "sha256:bd4bf63ac125144f6740ca84e2e62279baa9c68185901bd8d578adfe642b026d", size = 108232, upload-time = "2026-06-25T20:47:23.639Z" },
 ]
 
 [[package]]
@@ -1295,7 +1283,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", editable = "../crucible" },
+    { name = "crucible-forge", specifier = ">=0.1.0" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },

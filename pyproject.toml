@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "crucible-forge",
+    "crucible-forge>=0.1.0",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
     "python-ulid>=2.0",
@@ -53,11 +53,11 @@ dev = [
     "pytest-textual-snapshot>=1.0",
 ]
 
-# Local development: resolve crucible-forge from the sibling checkout.
-# (Published builds depend on crucible-forge from PyPI; this override is
-# dev-only metadata and is not embedded in the built wheel.)
-[tool.uv.sources]
-crucible-forge = { path = "../crucible", editable = true }
+# crucible-forge resolves from PyPI (published). To co-develop against a local
+# crucible checkout, add a dev-only override in a gitignored uv.toml, e.g.
+#   [sources]
+#   crucible-forge = { path = "../crucible", editable = true }
+# (kept out of pyproject so CI + published builds stay reproducible from PyPI).
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/specsmither"]
