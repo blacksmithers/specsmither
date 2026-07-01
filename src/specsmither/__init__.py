@@ -1,13 +1,10 @@
-"""specsmither — local-first, NO-LLM reimplementation of the SpecForge engine.
+"""specsmither — a local-first, NO-LLM control system for agentic AI implementation.
 
 Drives a software scope through ``Specification → Epic → Ticket → DAG`` over a
-single SQLite file. Imports the two pure gates side-by-side: ``crucible`` (the
-planning gate) and ``assay`` (the work gate, 0.2.0). The engine is fully
-deterministic and synchronous; only the MCP server and the TUI are async
-presentation adapters over it.
-
-M0 (this layer): ``domain/``, ``db/``, ``dag/``, ``rollups/``, ``operations/``,
-``adapters/`` — the deterministic substrate. No lifecycle, MCP, or CLI yet.
+single SQLite file, under two pure gates side-by-side: ``crucible`` (the planning
+gate) and ``assay`` (the work gate, 0.2.0). The engine is fully deterministic and
+synchronous; only the MCP server (``specsmither-mcp``) and the TUI (``specsmither``)
+are async presentation adapters over it.
 """
 
 from __future__ import annotations

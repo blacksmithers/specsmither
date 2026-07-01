@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Open-source, local-first, <b>NO-LLM</b> reimplementation of the SpecForge engine.
+  Open-source, local-first, <b>NO-LLM</b> Control System for Agentic AI Implementation
 </p>
 
 <p align="center">
@@ -118,21 +118,13 @@ Resolution precedence is **env > project (`.specsmither/config.json`) > global
 ## Development
 
 ```sh
-uv sync --locked --dev     # crucible-forge resolves from PyPI
+uv sync --locked --dev
 uv run ruff check src tests
 uv run mypy
 uv run pytest
 ```
 
-Requires Python 3.11+. To co-develop against a local `crucible` checkout, add a
-dev-only override in a gitignored `uv.toml`:
-
-```toml
-[sources]
-crucible-forge = { path = "../crucible", editable = true }
-```
-
-Determinism golden fixtures live in `fixtures/golden/` and Textual snapshot SVGs
+Requires Python 3.11+. Determinism golden fixtures live in `fixtures/golden/` and Textual snapshot SVGs
 in `tests/__snapshots__/`; both are committed (regenerated via `tools/` and
 `pytest --snapshot-update`), so CI runs no Node.
 
