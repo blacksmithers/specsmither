@@ -493,13 +493,17 @@ def _apply_item(
     if isinstance(item, SpecMutation):
         model = ENTITY_MODELS[item.entity_type]
         row = session.get(model, item.entity_id)
+        fields = _filtered(model, item.fields)
         if row is None:
-            raise NotFoundError(
-                f"{item.entity_type} {item.entity_id!r} not found",
-                context={"kind": item.entity_type, "id": item.entity_id},
-            )
-        for attr, value in _filtered(model, item.fields).items():
-            setattr(row, attr, value)
+            # specMutation is upsert-by-entity (write-plan.ts): INSERT when the row
+            # is absent (an APS create op) and UPDATE when present. The create plan
+            # carries the full required column set.
+            row = model(**{**fields, "id": item.entity_id})
+            session.add(row)
+            session.flush()  # make the row resolvable for _spec_id_for_entity.
+        else:
+            for attr, value in fields.items():
+                setattr(row, attr, value)
         _add(affected, _spec_id_for_entity(session, item.entity_type, item.entity_id))
 
     elif isinstance(item, EntityDelete):

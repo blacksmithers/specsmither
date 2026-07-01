@@ -1,0 +1,13 @@
+{
+  "input": {
+    "a": {
+      "b": {
+        "c": 1
+      }
+    }
+  },
+  "options": {
+    "key_folding": "safe"
+  },
+  "expected": "a.b.c: 1"
+}

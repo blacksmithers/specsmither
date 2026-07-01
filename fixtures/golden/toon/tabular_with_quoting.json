@@ -1,0 +1,25 @@
+{
+  "input": {
+    "repositories": [
+      {
+        "id": 28457823,
+        "name": "freeCodeCamp",
+        "repo": "freeCodeCamp/freeCodeCamp",
+        "description": "freeCodeCamp.org's open-source codebase, learn to code",
+        "createdAt": "2014-12-24T17:49:19Z",
+        "stars": 430886,
+        "defaultBranch": "main"
+      },
+      {
+        "id": 21737465,
+        "name": "awesome",
+        "repo": "sindresorhus/awesome",
+        "description": "😎 Awesome lists about all kinds of interesting topics",
+        "createdAt": "2014-07-11T13:42:37Z",
+        "stars": 410052,
+        "defaultBranch": "main"
+      }
+    ]
+  },
+  "expected": "repositories[2]{id,name,repo,description,createdAt,stars,defaultBranch}:\n  28457823,freeCodeCamp,freeCodeCamp/freeCodeCamp,\"freeCodeCamp.org's open-source codebase, learn to code\",\"2014-12-24T17:49:19Z\",430886,main\n  21737465,awesome,sindresorhus/awesome,😎 Awesome lists about all kinds of interesting topics,\"2014-07-11T13:42:37Z\",410052,main"
+}

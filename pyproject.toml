@@ -26,12 +26,22 @@ dependencies = [
     "pydantic>=2.6",
     "python-ulid>=2.0",
     "pyyaml>=6.0",
+    "mcp>=1.0",
+    "textual>=0.80",
 ]
 
 [project.urls]
 Homepage = "https://github.com/blacksmithers/specsmither"
 Repository = "https://github.com/blacksmithers/specsmither"
 Issues = "https://github.com/blacksmithers/specsmither/issues"
+
+# Entrypoints. `specsmither` opens the Textual TUI Observatory (the human surface);
+# `specsmither-mcp` is the agent surface — the MCP stdio server over the user-global
+# DB (TOON by default; SPECSMITHER_MCP_FORMAT=json switches). Both self-resolve the
+# DB via operations.workspace.resolve_db_path() — zero-arg console scripts.
+[project.scripts]
+specsmither = "specsmither.tui.app:run"
+specsmither-mcp = "specsmither.mcp.server:main"
 
 [dependency-groups]
 dev = [
@@ -40,6 +50,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
     "types-pyyaml>=6.0",
+    "pytest-textual-snapshot>=1.0",
 ]
 
 # Local development: resolve crucible-forge from the sibling checkout.

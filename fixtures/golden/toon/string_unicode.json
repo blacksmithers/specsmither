@@ -1,0 +1,6 @@
+{
+  "input": {
+    "emoji": "😎 héllo wörld 日本語"
+  },
+  "expected": "emoji: 😎 héllo wörld 日本語"
+}

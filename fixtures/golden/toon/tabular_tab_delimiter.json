@@ -1,0 +1,20 @@
+{
+  "input": {
+    "users": [
+      {
+        "id": 1,
+        "name": "Alice",
+        "role": "admin"
+      },
+      {
+        "id": 2,
+        "name": "Bob",
+        "role": "user"
+      }
+    ]
+  },
+  "options": {
+    "delimiter": "\t"
+  },
+  "expected": "users[2\t]{id\tname\trole}:\n  1\tAlice\tadmin\n  2\tBob\tuser"
+}

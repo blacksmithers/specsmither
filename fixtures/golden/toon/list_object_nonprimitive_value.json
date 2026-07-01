@@ -1,0 +1,18 @@
+{
+  "input": [
+    {
+      "id": 1,
+      "tags": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": 2,
+      "tags": [
+        "c"
+      ]
+    }
+  ],
+  "expected": "[2]:\n  - id: 1\n    tags[2]: a,b\n  - id: 2\n    tags[1]: c"
+}

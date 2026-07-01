@@ -1,0 +1,6 @@
+{
+  "input": {
+    "text": "line1\nline2"
+  },
+  "expected": "text: \"line1\\nline2\""
+}

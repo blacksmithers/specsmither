@@ -1,0 +1,13 @@
+{
+  "input": [
+    {
+      "id": 1,
+      "name": "x"
+    },
+    {
+      "id": 2,
+      "title": "y"
+    }
+  ],
+  "expected": "[2]:\n  - id: 1\n    name: x\n  - id: 2\n    title: y"
+}

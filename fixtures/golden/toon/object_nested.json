@@ -1,0 +1,10 @@
+{
+  "input": {
+    "context": {
+      "task": "Our favorite hikes together",
+      "location": "Boulder",
+      "season": "spring_2025"
+    }
+  },
+  "expected": "context:\n  task: Our favorite hikes together\n  location: Boulder\n  season: spring_2025"
+}

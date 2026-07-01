@@ -112,7 +112,13 @@ def _apply_flat(ticket: Ticket, record: TicketRecord) -> None:
 
 
 def _ac_rows(record: TicketRecord) -> list[ACRow]:
-    """Decompose ``acceptance_criteria`` into ordered child rows (order = position)."""
+    """Decompose ``acceptance_criteria`` into ordered child rows (order = 1-based position).
+
+    Positions are 1-based because the recomposed rows feed crucible's
+    :class:`~crucible.models.AcceptanceCriterion`, whose ``order`` is constrained
+    ``>= 1``; a 0-based position would make every first criterion structurally
+    invalid (failing the validator at every phase).
+    """
     return [
         ACRow(
             id=ac.id,
@@ -120,16 +126,20 @@ def _ac_rows(record: TicketRecord) -> list[ACRow]:
             given=ac.given,
             when=ac.when,
             then=ac.then,
-            order=index,
+            order=index + 1,
         )
         for index, ac in enumerate(record.acceptance_criteria)
     ]
 
 
 def _step_rows(record: TicketRecord) -> list[StepRow]:
-    """Decompose ``implementation_steps`` into ordered child rows (order = position)."""
+    """Decompose ``implementation_steps`` into ordered child rows (order = 1-based position).
+
+    1-based for the same reason as :func:`_ac_rows`: crucible's
+    :class:`~crucible.models.ImplementationStep` constrains ``order`` to ``>= 1``.
+    """
     return [
-        StepRow(id=step.id, ticket_id=record.id, text=step.text, order=index)
+        StepRow(id=step.id, ticket_id=record.id, text=step.text, order=index + 1)
         for index, step in enumerate(record.implementation_steps)
     ]
 

@@ -1,0 +1,6 @@
+{
+  "input": {
+    "s": "a|b"
+  },
+  "expected": "s: a|b"
+}

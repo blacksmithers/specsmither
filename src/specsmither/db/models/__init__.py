@@ -13,13 +13,14 @@ It re-exports :class:`Base` plus every concrete ORM model class and the
 
 The schema is: 7 core entities + git (2) + spec-type (1) + ticket-child (6:
 acceptance criteria, implementation steps, file changes, planned tests, code/type
-snippets) + planning-session (5) + work-session (5) = 26 tables. No ``review_*``
-tables (dropped per the SpecSmither architecture).
+snippets) + planning-session (5) + work-session (5) + config (1) = 27 tables. No
+``review_*`` tables (dropped per the SpecSmither architecture).
 """
 
 from __future__ import annotations
 
 from specsmither.db.base import Base, new_ulid, now_iso
+from specsmither.db.models.config import PlanningConfig
 from specsmither.db.models.core import (
     Blueprint,
     Epic,
@@ -63,6 +64,7 @@ __all__ = [
     "Epic",
     "EpicCommit",
     "ImplementationStep",
+    "PlanningConfig",
     "PlanningEntityScoreDatapoint",
     "PlanningPhaseTransition",
     "PlanningSession",

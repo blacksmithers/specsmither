@@ -1,0 +1,6 @@
+{
+  "input": {
+    "q": "say \"hi\" now"
+  },
+  "expected": "q: \"say \\\"hi\\\" now\""
+}

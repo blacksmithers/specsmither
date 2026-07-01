@@ -1,0 +1,6 @@
+{
+  "input": {
+    "text": "a\tb"
+  },
+  "expected": "text: \"a\\tb\""
+}

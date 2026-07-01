@@ -1,0 +1,13 @@
+{
+  "input": {
+    "nums": [
+      1,
+      2,
+      3
+    ]
+  },
+  "options": {
+    "delimiter": "\t"
+  },
+  "expected": "nums[3\t]: 1\t2\t3"
+}

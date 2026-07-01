@@ -1,0 +1,1210 @@
+{
+  "_source": "Derived from crucible fixtures/test-surface/cases/seed-cross-validation.json \u2014 a complete spec authored to pass result.passed at ALL SIX planning phases through the real CrucibleValidatorAdapter (planning_spec=86.1; epics 80/95; tickets >=75; valid dependency DAG with no islands/orphans, blueprint coverage, nfr performance test-type). codeSnippets/typeSnippets/guardrails are declared N/A via fieldDeclarations (SpecSmither does not model them) so the ticket rubric still credits them.",
+  "spec": {
+    "title": "TaskFlow \u2014 Collaborative Task Management Platform",
+    "description": "A real-time collaborative task management platform for distributed engineering teams.",
+    "background": "Engineering teams at fast-growing startups struggle to coordinate work across time zones. Existing tools lack deep integration with code review workflows and sprint planning, causing context switching and productivity loss.",
+    "architecture": "TaskFlow is built on a serverless event-driven architecture deployed on AWS. The frontend is a React single-page application served via CloudFront and communicates with a GraphQL API backed by AWS AppSync. Business logic lives in Node.js Lambda functions organized by domain (tasks, projects, notifications, users). Persistent state is stored in DynamoDB with a global secondary index strategy for flexible query patterns. Real-time collaboration is powered by AppSync subscriptions over WebSocket. Authentication is handled by Amazon Cognito with JWT-based authorization. All infrastructure is defined as code using AWS CDK. CI/CD pipelines run on GitHub Actions with automated testing gates before every deployment.",
+    "scope": {
+      "inScope": [
+        "Task creation, assignment, and lifecycle management",
+        "Real-time collaborative updates and presence indicators",
+        "Sprint planning with drag-and-drop board interface",
+        "GitHub pull request integration for task status updates",
+        "Email and in-app notification delivery"
+      ],
+      "outOfScope": [
+        "Native mobile application development",
+        "Time tracking and invoicing features",
+        "Third-party calendar synchronization beyond read-only"
+      ],
+      "assumptions": [
+        "Users have modern browser support (Chrome 90+, Firefox 88+, Safari 14+)",
+        "Teams are expected to have fewer than 500 members per organization"
+      ]
+    },
+    "goals": [
+      {
+        "id": "g-1",
+        "title": "Reduce cross-team coordination overhead",
+        "description": "Enable distributed engineering teams to coordinate work without synchronous standups by providing a shared, always-current view of project state.",
+        "type": "business",
+        "successCriteria": [
+          "Average time to assign and scope a task drops below 5 minutes",
+          "Weekly standup duration reduced by at least 30% within 60 days of adoption"
+        ]
+      },
+      {
+        "id": "g-2",
+        "title": "Deliver real-time collaborative editing without merge conflicts",
+        "description": "Provide instant, conflict-free updates to task descriptions, acceptance criteria, and comments so that multiple team members can contribute simultaneously.",
+        "type": "technical",
+        "successCriteria": [
+          "Concurrent edits by two users on the same task resolve deterministically within 200ms",
+          "Zero data-loss incidents reported during the first 90 days post-launch"
+        ]
+      },
+      {
+        "id": "g-3",
+        "title": "Seamlessly integrate with existing GitHub workflows",
+        "description": "Automatically reflect pull request status changes on linked tasks, closing the gap between code review and project management without manual updates.",
+        "type": "operational",
+        "successCriteria": [
+          "Pull request webhook events update task status within 10 seconds",
+          "At least 80% of implementation tasks have a linked PR within 48 hours of starting"
+        ]
+      }
+    ],
+    "requirements": [
+      {
+        "id": "r-1",
+        "title": "Task lifecycle management with status transitions",
+        "description": "Users must be able to create tasks, set priority and assignee, and transition tasks through defined statuses (backlog, in-progress, review, done). Status transitions must be validated against a configurable workflow.",
+        "type": "functional",
+        "acceptanceCriteria": [
+          {
+            "id": "r-1-ac-1",
+            "given": "A project member is viewing the task board",
+            "when": "They create a new task with a title, description, and assignee",
+            "then": "The task appears in the backlog column and the assignee receives an in-app notification",
+            "order": 1
+          }
+        ]
+      },
+      {
+        "id": "r-2",
+        "title": "Real-time presence and live update propagation",
+        "description": "All connected clients must receive task updates within 500ms of a change being committed. The UI must show which team members are currently viewing or editing each task.",
+        "type": "functional",
+        "acceptanceCriteria": [
+          {
+            "id": "r-2-ac-1",
+            "given": "Two users have the same task open in their browsers",
+            "when": "One user updates the task description",
+            "then": "The other user's browser reflects the new description within 500ms without a page refresh",
+            "order": 1
+          }
+        ]
+      },
+      {
+        "id": "r-3",
+        "title": "GitHub webhook integration for linked pull requests",
+        "description": "The system must accept GitHub webhook events for pull request opened, merged, and closed actions, and update the status of any task linked to that pull request accordingly.",
+        "type": "integration",
+        "acceptanceCriteria": [
+          {
+            "id": "r-3-ac-1",
+            "given": "A task has a linked GitHub pull request",
+            "when": "The pull request is merged on GitHub",
+            "then": "The linked task transitions to the review status within 15 seconds",
+            "order": 1
+          }
+        ]
+      }
+    ],
+    "nonFunctionalRequirements": [
+      {
+        "id": "nfr-1",
+        "description": "The GraphQL API must respond to 95th-percentile queries within 200ms under a sustained load of 500 concurrent users.",
+        "category": "performance",
+        "metric": "p95 API response time",
+        "target": "\u2264 200ms at 500 concurrent users",
+        "measurementMethod": "Load test with k6, 10-minute sustained ramp, measured at API Gateway"
+      }
+    ],
+    "guardrails": [
+      {
+        "id": "gr-1",
+        "description": "All user-supplied input must be validated and sanitized server-side before persistence to prevent injection attacks and data corruption.",
+        "category": "technical",
+        "rationale": "Client-side validation can be bypassed; server-side enforcement is the last line of defense.",
+        "consequence": "Unvalidated input reaching the database could lead to data corruption, XSS vulnerabilities, or unauthorized access."
+      }
+    ],
+    "techStack": [
+      {
+        "id": "ts-1",
+        "name": "React",
+        "version": "18.2",
+        "layer": "frontend",
+        "rationale": "Mature ecosystem, strong TypeScript support, and team familiarity reduce onboarding friction."
+      },
+      {
+        "id": "ts-2",
+        "name": "AWS DynamoDB",
+        "version": "latest",
+        "layer": "database",
+        "rationale": "Serverless, pay-per-request pricing aligns with early-stage traffic patterns, and single-table design enables the required query flexibility."
+      }
+    ],
+    "folderStructures": [
+      {
+        "id": "fs-1",
+        "scope": "monorepo root",
+        "description": "Top-level directory layout for the TaskFlow monorepo.",
+        "content": "taskflow/\n\u251c\u2500\u2500 apps/\n\u2502   \u251c\u2500\u2500 web/          # React SPA\n\u2502   \u2514\u2500\u2500 api/          # Lambda function handlers\n\u251c\u2500\u2500 packages/\n\u2502   \u251c\u2500\u2500 core/         # Shared domain types and utilities\n\u2502   \u2514\u2500\u2500 ui/           # Design system components\n\u251c\u2500\u2500 infrastructure/   # AWS CDK stacks\n\u251c\u2500\u2500 scripts/          # Developer tooling\n\u2514\u2500\u2500 .github/\n    \u2514\u2500\u2500 workflows/    # CI/CD pipeline definitions"
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "spec-ac-1",
+        "given": "A team member with project access is authenticated",
+        "when": "They navigate to the project board and create a task",
+        "then": "The task is persisted, appears on the board in real-time for all connected members, and the assignee is notified",
+        "order": 1
+      }
+    ]
+  },
+  "epics": [
+    {
+      "title": "Core Task Management Domain",
+      "description": "Implement the foundational task entity model, CRUD operations, and status transition engine that all other epics and features depend upon.",
+      "objective": "Deliver a fully functional task domain layer including persistence, validation, and status-machine enforcement so downstream epics can build on a stable foundation.",
+      "architecture": "The task domain is implemented as a set of Lambda resolvers connected to AppSync. Each resolver validates input against a Zod schema, applies business rules through a pure-function state machine, and persists to DynamoDB using a single-table design. The Task entity uses a composite primary key (PK: TASK#<taskId>, SK: METADATA) with GSIs for project-scoped queries (GSI1PK: PROJECT#<projectId>) and assignee queries (GSI2PK: USER#<userId>). Optimistic locking via a version attribute prevents lost updates under concurrent writes. Lambda functions share a core package that exports domain types and the state machine to ensure consistency across resolvers.",
+      "scope": {
+        "inScope": [
+          "Task entity CRUD operations via AppSync resolvers",
+          "Status transition validation via configurable state machine",
+          "DynamoDB single-table schema and GSI definitions",
+          "Optimistic locking to prevent concurrent write conflicts"
+        ],
+        "outOfScope": [
+          "Real-time subscription wiring (covered in Epic 2)",
+          "GitHub linkage logic (covered in Epic 3)"
+        ]
+      },
+      "goals": [
+        {
+          "id": "ep-1-g-1",
+          "title": "Provide a stable, tested task domain foundation for all subsequent epics",
+          "description": "All task CRUD operations and state transitions are implemented, tested, and stable before other epics build on top of them.",
+          "type": "technical",
+          "successCriteria": [
+            "Unit test coverage for domain logic exceeds 90%",
+            "All four CRUD operations pass integration tests against a live DynamoDB table"
+          ]
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "ep-1-ac-1",
+          "given": "An authenticated user with project membership",
+          "when": "They call the createTask mutation with valid input",
+          "then": "A task record is created in DynamoDB, the response includes the new task ID, and the status is set to backlog",
+          "order": 1
+        }
+      ],
+      "validationCommands": [
+        "pnpm test --filter @taskflow/api -- --grep 'task domain'",
+        "pnpm run integration:test --suite task-crud"
+      ],
+      "apiContracts": [
+        {
+          "id": "ep-1-api-1",
+          "name": "Task CRUD Mutations",
+          "type": "graphql",
+          "description": "createTask, updateTask, deleteTask, and transitionTaskStatus mutations with input validation and authorization guards."
+        }
+      ],
+      "sharedPatterns": [
+        {
+          "id": "ep-1-sp-1",
+          "name": "DynamoDB single-table item factory",
+          "description": "A factory function that constructs DynamoDB PutItem payloads with correct PK/SK/GSI key patterns for each entity type, ensuring consistent key formatting across all Lambda handlers."
+        }
+      ],
+      "fileStructures": [
+        {
+          "id": "ep-1-fs-1",
+          "scope": "packages/api/src/domain/task",
+          "description": "Files this epic creates or modifies for the task domain layer.",
+          "content": "packages/api/src/domain/task/\n\u251c\u2500\u2500 entity.ts            # Task entity type and Zod schema\n\u251c\u2500\u2500 state-machine.ts     # Pure-function status transition rules\n\u251c\u2500\u2500 repository.ts        # DynamoDB single-table read/write helpers\n\u251c\u2500\u2500 resolvers/\n\u2502   \u251c\u2500\u2500 createTask.ts    # AppSync resolver for task creation\n\u2502   \u251c\u2500\u2500 updateTask.ts    # AppSync resolver for task updates\n\u2502   \u251c\u2500\u2500 deleteTask.ts    # AppSync resolver for task deletion\n\u2502   \u2514\u2500\u2500 transitionTask.ts # AppSync resolver for status transitions\n\u2514\u2500\u2500 __tests__/\n    \u251c\u2500\u2500 state-machine.test.ts\n    \u2514\u2500\u2500 repository.integration.test.ts"
+        }
+      ],
+      "requirementsCovered": [
+        "r-1",
+        "r-2",
+        "r-3"
+      ],
+      "nfrsCovered": [
+        "nfr-1"
+      ],
+      "goalsCovered": [
+        "g-1",
+        "g-2",
+        "g-3"
+      ],
+      "tickets": [
+        {
+          "title": "Define Task domain type and DynamoDB schema",
+          "description": "Create the core Task TypeScript type, Zod validation schema, and DynamoDB single-table key patterns including GSI definitions for project and assignee queries.",
+          "ticketType": "implementation",
+          "complexity": "medium",
+          "order": 1,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-1-1-ac-1",
+              "given": "The core package is imported in a Lambda handler",
+              "when": "A developer calls the Task Zod schema parse method with valid input",
+              "then": "The parse succeeds and returns a typed Task object with all required fields",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-1-1-step-1",
+              "text": "Create packages/core/src/domain/task.ts with the Task TypeScript type and TaskStatus enum.",
+              "order": 1
+            },
+            {
+              "id": "tkt-1-1-step-2",
+              "text": "Add the Zod TaskSchema with field-level validation rules matching the domain type.",
+              "order": 2
+            },
+            {
+              "id": "tkt-1-1-step-3",
+              "text": "Define DynamoDB key helper functions: taskPK, taskSK, taskGSI1PK, taskGSI2PK.",
+              "order": 3
+            }
+          ],
+          "filesToBeCreated": [
+            "packages/core/src/domain/task.ts",
+            "packages/core/src/domain/task-keys.ts"
+          ],
+          "filesToBeModified": [
+            "packages/core/src/index.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [],
+          "guardrails": [
+            "All exported types must be derived from the Zod schema using z.infer<> to prevent type drift between runtime validation and compile-time types."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "symbol": "TaskSchema",
+              "description": "Zod schema defining the complete Task entity shape and validation rules."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "typeName": "Task",
+              "description": "Core Task domain type inferred from TaskSchema; used by all Lambda resolvers."
+            }
+          ],
+          "fieldDeclarations": {
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            },
+            "dependencies": {
+              "value": "N/A",
+              "reason": "Foundational ticket defining the Task domain entity; no prior work in the spec precedes it."
+            }
+          },
+          "estimatedMinutes": 30,
+          "codeSnippets": [
+            {
+              "id": "tkt-1-1-codeSnippets-1",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-1, snippet 1.",
+              "content": "// Implementation pattern 1 for ticket tkt-1-1\nexport function tkt_1_1_handler_1(input: unknown): unknown {\n  return input;\n}"
+            },
+            {
+              "id": "tkt-1-1-codeSnippets-2",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-1, snippet 2.",
+              "content": "// Implementation pattern 2 for ticket tkt-1-1\nexport function tkt_1_1_handler_2(input: unknown): unknown {\n  return input;\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-1-1-typeSnippets-1",
+              "language": "typescript",
+              "description": "Reference type for tkt-1-1, snippet 1.",
+              "content": "// Type contract 1 for ticket tkt-1-1\nexport interface tkt_1_1_Type_1 {\n  id: string;\n  payload: unknown;\n}"
+            }
+          ],
+          "ref": "tkt-1-1"
+        },
+        {
+          "title": "Implement createTask and updateTask Lambda resolvers",
+          "description": "Build the AppSync Lambda resolvers for createTask and updateTask mutations, using the Task schema from tkt-1-1 for input validation and DynamoDB PutItem/UpdateItem for persistence.",
+          "ticketType": "implementation",
+          "complexity": "medium",
+          "order": 2,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-1-2-ac-1",
+              "given": "An authenticated user calls the createTask GraphQL mutation",
+              "when": "All required fields are provided and valid",
+              "then": "A new task is created in DynamoDB and the resolver returns the created task with its generated ID",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-1-2-step-1",
+              "text": "Create apps/api/src/resolvers/task/create-task.ts implementing the createTask mutation resolver.",
+              "order": 1
+            },
+            {
+              "id": "tkt-1-2-step-2",
+              "text": "Create apps/api/src/resolvers/task/update-task.ts implementing the updateTask mutation resolver with optimistic locking.",
+              "order": 2
+            },
+            {
+              "id": "tkt-1-2-step-3",
+              "text": "Wire both resolvers into the AppSync schema by updating the resolver mapping configuration.",
+              "order": 3
+            }
+          ],
+          "filesToBeCreated": [
+            "apps/api/src/resolvers/task/create-task.ts",
+            "apps/api/src/resolvers/task/update-task.ts"
+          ],
+          "filesToBeModified": [
+            "apps/api/src/resolvers/index.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "packages/core/src/domain/task.ts"
+          ],
+          "guardrails": [
+            "Input must be validated through TaskSchema.parse() before any DynamoDB write to ensure invalid data never reaches the database."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "apps/api/src/resolvers/task/create-task.ts",
+              "symbol": "createTaskResolver",
+              "description": "AppSync Lambda resolver handler for the createTask GraphQL mutation."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "typeName": "Task",
+              "description": "Domain type used to type-check resolver return values and DynamoDB payloads."
+            }
+          ],
+          "estimatedMinutes": 30,
+          "codeSnippets": [
+            {
+              "id": "tkt-1-2-codeSnippets-1",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-2, snippet 1.",
+              "content": "// Implementation pattern 1 for ticket tkt-1-2\nexport function tkt_1_2_handler_1(input: unknown): unknown {\n  return input;\n}"
+            },
+            {
+              "id": "tkt-1-2-codeSnippets-2",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-2, snippet 2.",
+              "content": "// Implementation pattern 2 for ticket tkt-1-2\nexport function tkt_1_2_handler_2(input: unknown): unknown {\n  return input;\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-1-2-typeSnippets-1",
+              "language": "typescript",
+              "description": "Reference type for tkt-1-2, snippet 1.",
+              "content": "// Type contract 1 for ticket tkt-1-2\nexport interface tkt_1_2_Type_1 {\n  id: string;\n  payload: unknown;\n}"
+            }
+          ],
+          "fieldDeclarations": {
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "ref": "tkt-1-2"
+        },
+        {
+          "title": "Implement task status transition state machine",
+          "description": "Implement a pure-function state machine that enforces allowed status transitions for tasks, returning descriptive errors for invalid transitions.",
+          "ticketType": "implementation",
+          "complexity": "small",
+          "order": 3,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-1-3-ac-1",
+              "given": "A task is in in_progress status",
+              "when": "The transitionTaskStatus mutation is called with target status review",
+              "then": "The transition is accepted and the task status is updated to review",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-1-3-step-1",
+              "text": "Create packages/core/src/domain/task-state-machine.ts with the allowed transitions map.",
+              "order": 1
+            },
+            {
+              "id": "tkt-1-3-step-2",
+              "text": "Implement the transition() pure function that validates the transition and returns the new status or throws a domain error.",
+              "order": 2
+            },
+            {
+              "id": "tkt-1-3-step-3",
+              "text": "Export the state machine from the core package public API.",
+              "order": 3
+            }
+          ],
+          "filesToBeCreated": [
+            "packages/core/src/domain/task-state-machine.ts"
+          ],
+          "filesToBeModified": [
+            "packages/core/src/index.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "packages/core/src/domain/task.ts"
+          ],
+          "guardrails": [
+            "The state machine must be a pure function with no side effects so it can be used safely in both Lambda resolvers and unit tests without mocking."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task-state-machine.ts",
+              "symbol": "transition",
+              "description": "Pure function that validates and applies a task status transition, throwing a domain error on invalid transitions."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "typeName": "TaskStatus",
+              "description": "Union type of all valid task status values, used as input and return type for the transition function."
+            }
+          ],
+          "estimatedMinutes": 30,
+          "codeSnippets": [
+            {
+              "id": "tkt-1-3-codeSnippets-1",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-3, snippet 1.",
+              "content": "// Implementation pattern 1 for ticket tkt-1-3\nexport function tkt_1_3_handler_1(input: unknown): unknown {\n  return input;\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-1-3-typeSnippets-1",
+              "language": "typescript",
+              "description": "Reference type for tkt-1-3, snippet 1.",
+              "content": "// Type contract 1 for ticket tkt-1-3\nexport interface tkt_1_3_Type_1 {\n  id: string;\n  payload: unknown;\n}"
+            }
+          ],
+          "fieldDeclarations": {
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "ref": "tkt-1-3"
+        },
+        {
+          "title": "Implement deleteTask resolver and transitionTaskStatus resolver",
+          "description": "Build the deleteTask (soft-delete) Lambda resolver and the transitionTaskStatus resolver that uses the state machine from tkt-1-3 to validate and apply transitions.",
+          "ticketType": "implementation",
+          "complexity": "medium",
+          "order": 4,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-1-4-ac-1",
+              "given": "A task exists in DynamoDB",
+              "when": "The deleteTask mutation is called by an authorized user",
+              "then": "The task's deletedAt field is set to the current timestamp and it no longer appears in list queries",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-1-4-step-1",
+              "text": "Create apps/api/src/resolvers/task/delete-task.ts with a soft-delete resolver setting deletedAt.",
+              "order": 1
+            },
+            {
+              "id": "tkt-1-4-step-2",
+              "text": "Create apps/api/src/resolvers/task/transition-task-status.ts that calls the state machine and writes the new status to DynamoDB.",
+              "order": 2
+            },
+            {
+              "id": "tkt-1-4-step-3",
+              "text": "Add resolver mappings for both mutations in the AppSync configuration.",
+              "order": 3
+            }
+          ],
+          "filesToBeCreated": [
+            "apps/api/src/resolvers/task/delete-task.ts",
+            "apps/api/src/resolvers/task/transition-task-status.ts"
+          ],
+          "filesToBeModified": [
+            "apps/api/src/resolvers/index.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "packages/core/src/domain/task-state-machine.ts"
+          ],
+          "guardrails": [
+            "Soft delete must use a conditional expression to prevent deleting already-deleted tasks, avoiding accidental data loss on concurrent requests."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "apps/api/src/resolvers/task/transition-task-status.ts",
+              "symbol": "transitionTaskStatusResolver",
+              "description": "AppSync Lambda resolver that validates and applies task status transitions using the state machine."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "typeName": "Task",
+              "description": "Domain type used for typing the resolver response after a soft delete or status transition."
+            }
+          ],
+          "estimatedMinutes": 30,
+          "codeSnippets": [
+            {
+              "id": "tkt-1-4-codeSnippets-1",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-4, snippet 1.",
+              "content": "// Implementation pattern 1 for ticket tkt-1-4\nexport function tkt_1_4_handler_1(input: unknown): unknown {\n  return input;\n}"
+            },
+            {
+              "id": "tkt-1-4-codeSnippets-2",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-4, snippet 2.",
+              "content": "// Implementation pattern 2 for ticket tkt-1-4\nexport function tkt_1_4_handler_2(input: unknown): unknown {\n  return input;\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-1-4-typeSnippets-1",
+              "language": "typescript",
+              "description": "Reference type for tkt-1-4, snippet 1.",
+              "content": "// Type contract 1 for ticket tkt-1-4\nexport interface tkt_1_4_Type_1 {\n  id: string;\n  payload: unknown;\n}"
+            }
+          ],
+          "fieldDeclarations": {
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "ref": "tkt-1-4"
+        },
+        {
+          "title": "End-to-end integration tests for task CRUD domain",
+          "description": "Write integration tests covering all four CRUD operations, valid status transitions, and invalid transition rejection against a real DynamoDB test table.",
+          "ticketType": "verification",
+          "complexity": "medium",
+          "order": 5,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-1-5-ac-1",
+              "given": "The test suite runs against a seeded DynamoDB table",
+              "when": "All task CRUD integration tests execute",
+              "then": "100% of tests pass and coverage for the domain package exceeds 90%",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-1-5-step-1",
+              "text": "Create apps/api/src/__tests__/integration/task-crud.test.ts with test cases for create, update, delete, and transition.",
+              "order": 1
+            },
+            {
+              "id": "tkt-1-5-step-2",
+              "text": "Add a DynamoDB table fixture helper that creates and tears down a test table per test suite run.",
+              "order": 2
+            },
+            {
+              "id": "tkt-1-5-step-3",
+              "text": "Configure CI workflow to run integration tests against a local DynamoDB Local container.",
+              "order": 3
+            }
+          ],
+          "filesToBeCreated": [
+            "apps/api/src/__tests__/integration/task-crud.test.ts",
+            "apps/api/src/__tests__/helpers/dynamo-fixture.ts"
+          ],
+          "filesToBeModified": [
+            ".github/workflows/ci.yml"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "packages/core/src/domain/task.ts",
+            "packages/core/src/domain/task-state-machine.ts"
+          ],
+          "guardrails": [
+            "Tests must not share DynamoDB table state across test cases; each test must set up and tear down its own data to prevent flaky ordering dependencies."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "apps/api/src/__tests__/integration/task-crud.test.ts",
+              "symbol": "describe('task CRUD domain')",
+              "description": "Top-level describe block grouping all integration tests for the task domain."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "packages/core/src/domain/task.ts",
+              "typeName": "Task",
+              "description": "Domain type used to assert response shapes in integration test assertions."
+            }
+          ],
+          "estimatedMinutes": 30,
+          "codeSnippets": [
+            {
+              "id": "tkt-1-5-codeSnippets-1",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-5, snippet 1.",
+              "content": "// Implementation pattern 1 for ticket tkt-1-5\nexport function tkt_1_5_handler_1(input: unknown): unknown {\n  return input;\n}"
+            },
+            {
+              "id": "tkt-1-5-codeSnippets-2",
+              "language": "typescript",
+              "description": "Reference implementation pattern for tkt-1-5, snippet 2.",
+              "content": "// Implementation pattern 2 for ticket tkt-1-5\nexport function tkt_1_5_handler_2(input: unknown): unknown {\n  return input;\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-1-5-typeSnippets-1",
+              "language": "typescript",
+              "description": "Reference type for tkt-1-5, snippet 1.",
+              "content": "// Type contract 1 for ticket tkt-1-5\nexport interface tkt_1_5_Type_1 {\n  id: string;\n  payload: unknown;\n}"
+            }
+          ],
+          "testTypes": [
+            "integration",
+            "performance"
+          ],
+          "qualityGates": [
+            "All CRUD operations must return correct HTTP-equivalent status codes via AppSync error handling",
+            "Invalid status transitions must return a domain error with a human-readable message",
+            "Test suite must complete in under 60 seconds on CI"
+          ],
+          "testCommands": [
+            "pnpm run integration:test --suite task-crud",
+            "pnpm run coverage:report --package api"
+          ],
+          "coverageTarget": 90,
+          "fieldDeclarations": {
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "ref": "tkt-1-5"
+        }
+      ]
+    },
+    {
+      "title": "Notification Delivery Layer",
+      "description": "Implement the asynchronous notification pipeline that surfaces task assignment, status change, and mention events to the recipient via in-app and email channels.",
+      "objective": "Deliver a reliable notification system layered on top of the task domain so users are alerted to relevant changes without polling.",
+      "architecture": "The notification layer subscribes to task domain events emitted by the resolvers in ep-1. A dedicated Lambda processes events asynchronously and fans out to in-app delivery (DynamoDB notification table) and email delivery (SES). Idempotency keys derived from event metadata prevent duplicate notifications when retries occur. The notification table uses TTL attributes to expire stale in-app entries after thirty days.",
+      "scope": {
+        "inScope": [
+          "Asynchronous notification fan-out",
+          "In-app and email delivery channels",
+          "Idempotent event processing"
+        ],
+        "outOfScope": [
+          "SMS delivery (deferred to a later epic)",
+          "User notification preferences UI"
+        ]
+      },
+      "goals": [
+        {
+          "id": "ep-2-g-1",
+          "title": "Deliver reliable notifications without polling",
+          "description": "Recipients receive task assignment and status change events via push channels rather than client polling, reducing client load and latency.",
+          "type": "technical",
+          "successCriteria": [
+            "End-to-end notification latency stays under 2 seconds at the 95th percentile",
+            "Duplicate notifications occur in fewer than 0.1% of delivered events"
+          ]
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "ep-2-ac-1",
+          "given": "A user is assigned to a task",
+          "when": "The task domain emits a task-assigned event",
+          "then": "The recipient receives both an in-app entry and an email within 2 seconds",
+          "order": 1
+        }
+      ],
+      "validationCommands": [
+        "pnpm test --filter @taskflow/notifications"
+      ],
+      "apiContracts": [
+        {
+          "id": "ep-2-api-1",
+          "name": "Notification fan-out events",
+          "type": "rest",
+          "description": "Internal contract for notification event payloads consumed by the fan-out Lambda."
+        }
+      ],
+      "sharedPatterns": [
+        {
+          "id": "ep-2-sp-1",
+          "name": "Idempotent event processor",
+          "description": "Wraps Lambda handlers with an idempotency key check against DynamoDB before performing the side effect, preventing duplicate notifications under retry storms."
+        }
+      ],
+      "fileStructures": [
+        {
+          "id": "ep-2-fs-1",
+          "scope": "packages/api/src/domain/notifications",
+          "description": "Files this epic creates for the notification fan-out subsystem.",
+          "content": "packages/api/src/domain/notifications/\n\u251c\u2500\u2500 event-router.ts      # Maps domain events to notification channels\n\u251c\u2500\u2500 idempotency.ts       # DynamoDB-backed idempotency wrapper\n\u251c\u2500\u2500 handlers/\n\u2502   \u251c\u2500\u2500 email.ts         # SES email handler\n\u2502   \u2514\u2500\u2500 push.ts          # Mobile push handler\n\u2514\u2500\u2500 __tests__/\n    \u2514\u2500\u2500 event-router.test.ts"
+        }
+      ],
+      "requirementsCovered": [],
+      "nfrsCovered": [],
+      "goalsCovered": [],
+      "tickets": [
+        {
+          "title": "Provision notifications DynamoDB table and SES configuration",
+          "description": "Define the notifications table with TTL attribute and configure the SES sender identity needed for email delivery.",
+          "ticketType": "implementation",
+          "complexity": "small",
+          "order": 1,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-2-1-ac-1",
+              "given": "The notifications stack is deployed",
+              "when": "The DynamoDB table is created with TTL enabled and SES is configured with a verified sender",
+              "then": "The infrastructure is ready for the fan-out Lambda to write notification entries and send emails",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-2-1-step-1",
+              "text": "Add the NotificationTable construct to the CDK notifications stack with PK, SK, and TTL.",
+              "order": 1
+            },
+            {
+              "id": "tkt-2-1-step-2",
+              "text": "Configure SES sender identity and DKIM in the same stack.",
+              "order": 2
+            }
+          ],
+          "filesToBeCreated": [
+            "infrastructure/lib/notifications-stack.ts"
+          ],
+          "filesToBeModified": [
+            "infrastructure/bin/app.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [],
+          "guardrails": [
+            "TTL attribute names must match the project convention 'expiresAt' to remain consistent with other tables."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "infrastructure/lib/notifications-stack.ts",
+              "symbol": "NotificationsStack",
+              "description": "CDK stack provisioning the notifications table and SES configuration."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "infrastructure/lib/notifications-stack.ts",
+              "typeName": "NotificationsStackProps",
+              "description": "Props interface for the notifications stack."
+            }
+          ],
+          "fieldDeclarations": {
+            "blueprintReferences": {
+              "value": "N/A",
+              "reason": "Infrastructure provisioning ticket \u2014 has no semantic relationship to the task state machine or system architecture blueprints."
+            },
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "estimatedMinutes": 20,
+          "codeSnippets": [
+            {
+              "id": "tkt-2-1-codeSnippets-1",
+              "language": "typescript",
+              "description": "CDK construct outline for the notifications table.",
+              "content": "// CDK outline for tkt-2-1\nexport class NotificationsStack extends Stack {\n  constructor(scope: Construct, id: string, props: NotificationsStackProps) { super(scope, id, props); }\n}"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-2-1-typeSnippets-1",
+              "language": "typescript",
+              "description": "Props interface for tkt-2-1 stack.",
+              "content": "export interface NotificationsStackProps { senderEmail: string }"
+            }
+          ],
+          "ref": "tkt-2-1"
+        },
+        {
+          "title": "Implement notification fan-out Lambda handler",
+          "description": "Build the Lambda that consumes task domain events and fans them out to the notifications table and SES email channel using an idempotent processor.",
+          "ticketType": "implementation",
+          "complexity": "small",
+          "order": 2,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-2-2-ac-1",
+              "given": "A task domain event arrives at the fan-out Lambda",
+              "when": "The event has a valid recipient and is not a duplicate",
+              "then": "Both an in-app entry and an SES email are dispatched within 2 seconds",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-2-2-step-1",
+              "text": "Create the Lambda handler entry point and event parser.",
+              "order": 1
+            },
+            {
+              "id": "tkt-2-2-step-2",
+              "text": "Wire the idempotent processor pattern to guard the side effects.",
+              "order": 2
+            }
+          ],
+          "filesToBeCreated": [
+            "apps/api/src/notifications/fan-out.ts"
+          ],
+          "filesToBeModified": [
+            "apps/api/src/resolvers/index.ts"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "infrastructure/lib/notifications-stack.ts"
+          ],
+          "guardrails": [
+            "All side effects must be wrapped in the idempotent processor to prevent duplicate notifications under retry storms."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "apps/api/src/notifications/fan-out.ts",
+              "symbol": "fanOutHandler",
+              "description": "Lambda entry point for the notification fan-out pipeline."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "apps/api/src/notifications/fan-out.ts",
+              "typeName": "FanOutEvent",
+              "description": "Event payload type accepted by the fan-out handler."
+            }
+          ],
+          "fieldDeclarations": {
+            "blueprintReferences": {
+              "value": "N/A",
+              "reason": "Notification handler operates on its own domain; the existing blueprints describe the task state machine and overall architecture, neither of which constrains this internal handler."
+            },
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "estimatedMinutes": 25,
+          "codeSnippets": [
+            {
+              "id": "tkt-2-2-codeSnippets-1",
+              "language": "typescript",
+              "description": "Lambda handler outline.",
+              "content": "// Handler outline for tkt-2-2\nexport async function fanOutHandler(event: FanOutEvent): Promise<void> { /* TODO */ }"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-2-2-typeSnippets-1",
+              "language": "typescript",
+              "description": "Event type for the fan-out handler.",
+              "content": "export interface FanOutEvent { taskId: string; recipientId: string; kind: 'assigned' | 'status_changed' | 'mentioned' }"
+            }
+          ],
+          "ref": "tkt-2-2"
+        },
+        {
+          "title": "Verify end-to-end notification delivery",
+          "description": "Add an integration test that publishes a task domain event and asserts that the in-app entry and email are produced within the latency target.",
+          "ticketType": "verification",
+          "complexity": "small",
+          "order": 3,
+          "acceptanceCriteria": [
+            {
+              "id": "tkt-2-3-ac-1",
+              "given": "The notifications stack is deployed in the integration environment",
+              "when": "A task-assigned event is emitted",
+              "then": "The integration test observes both an in-app row and an SES email within 2 seconds",
+              "order": 1
+            }
+          ],
+          "implementationSteps": [
+            {
+              "id": "tkt-2-3-step-1",
+              "text": "Author the integration test harness against the deployed integration environment.",
+              "order": 1
+            },
+            {
+              "id": "tkt-2-3-step-2",
+              "text": "Wire the test into the CI pipeline as a post-deploy gate.",
+              "order": 2
+            }
+          ],
+          "filesToBeCreated": [
+            "apps/api/src/__tests__/integration/notifications.test.ts"
+          ],
+          "filesToBeModified": [
+            ".github/workflows/post-deploy.yml"
+          ],
+          "filesToBeDeleted": [],
+          "filesToBeReferenced": [
+            "apps/api/src/notifications/fan-out.ts"
+          ],
+          "guardrails": [
+            "The integration test must run against a real SES sandbox identity rather than mocked clients."
+          ],
+          "codeReferences": [
+            {
+              "filePath": "apps/api/src/__tests__/integration/notifications.test.ts",
+              "symbol": "endToEndNotificationDelivery",
+              "description": "Integration test asserting end-to-end notification delivery latency."
+            }
+          ],
+          "typeReferences": [
+            {
+              "filePath": "apps/api/src/__tests__/integration/notifications.test.ts",
+              "typeName": "NotificationFixture",
+              "description": "Helper type for the integration test fixture."
+            }
+          ],
+          "fieldDeclarations": {
+            "blueprintReferences": {
+              "value": "N/A",
+              "reason": "Verification ticket asserts behavior of the fan-out Lambda; the project blueprints describe domain semantics that this test does not reshape."
+            },
+            "codeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "typeSnippets": {
+              "value": "N/A",
+              "reason": "SpecSmither does not model inline code/type snippets; references and implementation steps capture the contract."
+            },
+            "guardrails": {
+              "value": "N/A",
+              "reason": "Guardrails for this ticket are captured by the spec-level guardrails and acceptance criteria."
+            }
+          },
+          "estimatedMinutes": 25,
+          "codeSnippets": [
+            {
+              "id": "tkt-2-3-codeSnippets-1",
+              "language": "typescript",
+              "description": "Integration test outline.",
+              "content": "// Integration test outline for tkt-2-3\nimport { fanOutHandler } from '../../notifications/fan-out.js';\nexport function endToEndNotificationDelivery(): void { /* TODO */ }"
+            }
+          ],
+          "typeSnippets": [
+            {
+              "id": "tkt-2-3-typeSnippets-1",
+              "language": "typescript",
+              "description": "Fixture helper type.",
+              "content": "export interface NotificationFixture { taskId: string; recipientId: string }"
+            }
+          ],
+          "testTypes": [
+            "integration"
+          ],
+          "qualityGates": [
+            "all tests pass"
+          ],
+          "testCommands": [
+            "pnpm test --filter @taskflow/notifications -- --grep 'end-to-end'"
+          ],
+          "coverageTarget": 70,
+          "ref": "tkt-2-3"
+        }
+      ]
+    }
+  ],
+  "blueprints": [
+    {
+      "title": "Task Entity State Machine",
+      "category": "state",
+      "coverageType": "ticket",
+      "content": "```mermaid\nstateDiagram-v2\n  [*] --> backlog : task created\n  backlog --> in_progress : assignee starts work\n  in_progress --> review : PR opened\n  review --> done : PR merged\n  review --> in_progress : PR closed without merge\n  done --> [*]\n```",
+      "ref": "bp-1"
+    },
+    {
+      "title": "System Architecture Overview",
+      "category": "architecture",
+      "coverageType": "ticket",
+      "content": "```mermaid\ngraph TD\n  Client[React SPA] -->|GraphQL| AppSync\n  AppSync --> LambdaTask[Task Lambda]\n  AppSync --> LambdaNotif[Notification Lambda]\n  LambdaTask --> DynamoDB\n  LambdaNotif --> SES\n  GitHub -->|Webhook| APIGateway\n  APIGateway --> LambdaWebhook[Webhook Lambda]\n  LambdaWebhook --> DynamoDB\n```",
+      "ref": "bp-2"
+    }
+  ],
+  "dependencies": [
+    {
+      "ticket": "tkt-1-2",
+      "dependsOn": [
+        "tkt-1-1"
+      ]
+    },
+    {
+      "ticket": "tkt-1-3",
+      "dependsOn": [
+        "tkt-1-1"
+      ]
+    },
+    {
+      "ticket": "tkt-1-4",
+      "dependsOn": [
+        "tkt-1-3"
+      ]
+    },
+    {
+      "ticket": "tkt-1-5",
+      "dependsOn": [
+        "tkt-1-1",
+        "tkt-1-2",
+        "tkt-1-3",
+        "tkt-1-4"
+      ]
+    },
+    {
+      "ticket": "tkt-2-1",
+      "dependsOn": [
+        "tkt-1-5"
+      ]
+    },
+    {
+      "ticket": "tkt-2-2",
+      "dependsOn": [
+        "tkt-2-1"
+      ]
+    },
+    {
+      "ticket": "tkt-2-3",
+      "dependsOn": [
+        "tkt-2-1",
+        "tkt-2-2"
+      ]
+    }
+  ],
+  "blueprintLinks": [
+    {
+      "ticketRef": "tkt-1-1",
+      "blueprintId": "bp-1",
+      "context": "The status field on the Task type must match the states defined in the state machine blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-2",
+      "blueprintId": "bp-1",
+      "context": "Newly created tasks must be initialized in the backlog state as shown in the state machine blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-2",
+      "blueprintId": "bp-2",
+      "context": "Resolvers connect to DynamoDB via the Lambda layer depicted in the architecture blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-3",
+      "blueprintId": "bp-1",
+      "context": "The allowed transitions map is derived directly from the state machine blueprint edges.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-4",
+      "blueprintId": "bp-1",
+      "context": "The transitionTaskStatus resolver must only permit the transitions shown in the state machine blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-4",
+      "blueprintId": "bp-2",
+      "context": "Resolvers interact with DynamoDB through the Lambda layer shown in the architecture blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-5",
+      "blueprintId": "bp-1",
+      "context": "Integration tests must cover every valid transition edge and at least two invalid transition scenarios from the state machine blueprint.",
+      "section": null
+    },
+    {
+      "ticketRef": "tkt-1-5",
+      "blueprintId": "bp-2",
+      "context": "Tests invoke the Lambda resolvers through the same AppSync-to-Lambda path shown in the architecture blueprint.",
+      "section": null
+    }
+  ]
+}

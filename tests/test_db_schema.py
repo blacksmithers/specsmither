@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from specsmither.db.base import make_session_factory, new_ulid
 from specsmither.db.migrations import (
     BASELINE_VERSION,
+    CURRENT_VERSION,
     apply_migrations,
     current_version,
     get_default_specification_type_id,
@@ -88,6 +89,8 @@ EXPECTED_MODEL_TABLES = frozenset(
         "work_session_impl_step_completions",
         "work_session_file_changes",
         "work_session_test_results",
+        # planning config (0.1.0 addition, migration v2)
+        "config",
     }
 )
 
@@ -131,8 +134,9 @@ def test_init_db_creates_all_tables_and_seeds_single_default(tmp_path: Path) -> 
         # Every ORM model table is present (superset check) plus the version ledger.
         assert names >= EXPECTED_MODEL_TABLES
         assert "schema_migrations" in names
-        assert len(EXPECTED_MODEL_TABLES) == 26
-        assert current_version(engine) == BASELINE_VERSION == 1
+        assert len(EXPECTED_MODEL_TABLES) == 27
+        assert BASELINE_VERSION == 1
+        assert current_version(engine) == CURRENT_VERSION
 
         factory = make_session_factory(engine)
         with factory() as session:
@@ -145,9 +149,9 @@ def test_init_db_creates_all_tables_and_seeds_single_default(tmp_path: Path) -> 
             ).scalar_one()
             assert n_default == 1
 
-        # Re-running migrations is a no-op: still version 1, still one default.
+        # Re-running migrations is a no-op: still at the latest version, still one default.
         apply_migrations(engine)
-        assert current_version(engine) == 1
+        assert current_version(engine) == CURRENT_VERSION
         with factory() as session:
             assert _count(session, SpecificationType) == 1
     finally:

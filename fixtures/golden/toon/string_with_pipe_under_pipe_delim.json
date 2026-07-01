@@ -1,0 +1,9 @@
+{
+  "input": {
+    "s": "a|b"
+  },
+  "options": {
+    "delimiter": "|"
+  },
+  "expected": "s: \"a|b\""
+}

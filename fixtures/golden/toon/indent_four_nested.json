@@ -1,0 +1,23 @@
+{
+  "input": {
+    "a": {
+      "b": {
+        "c": 1
+      }
+    },
+    "list": [
+      {
+        "id": 1,
+        "v": 2
+      },
+      {
+        "id": 2,
+        "v": 3
+      }
+    ]
+  },
+  "options": {
+    "indent": 4
+  },
+  "expected": "a:\n    b:\n        c: 1\nlist[2]{id,v}:\n    1,2\n    2,3"
+}

@@ -1,0 +1,158 @@
+/* SpecSmither Observatory — Textual stylesheet (planner/02). */
+
+Screen {
+    background: $surface;
+}
+
+#ctxbar {
+    height: 1;
+    dock: top;
+    background: $panel;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+/* ── SpecBrowser: tree left, detail right ───────────────────────────── */
+SpecBrowser {
+    height: 1fr;
+}
+SpecBrowser #tree-pane {
+    width: 42%;
+    min-width: 32;
+    border-right: solid $primary-darken-2;
+}
+SpecBrowser #detail-pane {
+    width: 1fr;
+    padding: 0 1;
+}
+#spec-tree {
+    padding: 1;
+}
+
+/* ── DAG / Work content scrolls ─────────────────────────────────────── */
+DagView, WorkProgress {
+    height: 1fr;
+    padding: 1 2;
+}
+
+/* ── Planning monitor: scrolling body + docked action bar ───────────── */
+PlanningMonitor {
+    height: 1fr;
+}
+PlanningMonitor #pm-body {
+    height: 1fr;
+    padding: 1 2;
+}
+PlanningMonitor #pm-actions {
+    height: auto;
+    dock: bottom;
+    padding: 1 2;
+    background: $panel;
+}
+PlanningMonitor Button {
+    margin: 0 1 0 0;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────── */
+SearchView {
+    height: 1fr;
+    padding: 1 2;
+}
+SearchView Input {
+    margin-bottom: 1;
+}
+SearchView DataTable {
+    height: 1fr;
+}
+
+/* ── Error panel + modals ───────────────────────────────────────────── */
+ErrorPanel {
+    align: center middle;
+}
+ErrorPanel #error-box {
+    width: 76;
+    height: auto;
+    max-height: 80%;
+    border: thick $error;
+    background: $surface;
+    padding: 1 2;
+}
+ErrorPanel #error-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+ErrorPanel #error-actions {
+    margin-top: 1;
+}
+
+ConfirmModal, FeedbackModal, SpecEpicEditModal, TicketEditModal, InitModal {
+    align: center middle;
+}
+FeedbackModal #modal-box {
+    width: 70;
+    height: auto;
+    border: thick $warning;
+    background: $surface;
+    padding: 1 2;
+}
+InitModal #init-status {
+    margin-bottom: 1;
+}
+InitModal #init-plan {
+    margin-top: 1;
+}
+/* Bound the plan so the Initialize/Close buttons stay visible on small terminals. */
+InitModal #init-scroll {
+    height: auto;
+    max-height: 20;
+}
+#modal-box {
+    width: 76;
+    height: auto;
+    max-height: 90%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+#modal-box-lg {
+    width: 88;
+    height: 90%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+#modal-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+#modal-scroll {
+    height: 1fr;
+}
+SpecEpicEditModal TextArea, TicketEditModal TextArea {
+    height: 4;
+    margin-bottom: 1;
+    border: round $primary-darken-2;
+}
+TicketEditModal #f-ac, TicketEditModal #f-steps {
+    height: 5;
+}
+SpecEpicEditModal Label, TicketEditModal Label {
+    color: $text-muted;
+}
+TicketEditModal Select, TicketEditModal Input {
+    margin-bottom: 1;
+}
+#modal-buttons {
+    height: auto;
+    margin-top: 1;
+    align-horizontal: right;
+}
+ConfirmModal Button, FeedbackModal Button, SpecEpicEditModal Button,
+TicketEditModal Button, ErrorPanel Button {
+    margin: 0 1 0 0;
+}

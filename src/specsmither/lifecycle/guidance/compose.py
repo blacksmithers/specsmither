@@ -1,0 +1,588 @@
+"""The single English guidance composer — :func:`compose_response` + get_planning_status.
+
+A **minimal** port of the TS composer family (``planning/lifecycle-planning-guidance/
+compose.ts`` + ``planning/process-guidance/compose-*.ts``). Rather than reproduce the
+~40 template-interpolated TS files (and their generated catalog), 0.1.0 ships one terse,
+correct, English composer keyed off :class:`~specsmither.domain.enums.GuidanceVariant`.
+The structured side-blocks (next-entities, recommended-moves, findings) are derived from
+the same inputs the verbs already hold (the gate result + the validator output), so the
+prose and the typed fields never disagree.
+
+Two public entry points the L4 verbs call:
+
+* :func:`compose_response` — the umbrella composer. Given the variant the verb decided on
+  (``gate_passed`` / ``gate_failed`` / ``denied`` / ``phase_advance`` / ``human_handover``
+  / the six get_planning_status variants / …), it produces the prose + the structured
+  :class:`PlanningAgentResponse`. ``next_entities`` is capped by
+  ``lifecycle_config['guidance']['maxNextEntitiesToShow']`` (default 3).
+* :func:`compose_get_planning_status` — the read-only status umbrella. Picks a variant
+  deterministically from session state (the get_planning_status precedence) and returns
+  the composed read-only response plus the one-shot side-effects the write plan applies
+  (``clear_pending_feedback`` / ``bump_last_read_at``).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from specsmither.domain.enums import (
+    GuidanceVariant,
+    PlanningPhase,
+    PlanningSessionStatus,
+    TransitionTrigger,
+)
+from specsmither.lifecycle.audit import MapperContext, map_path_to_operation
+from specsmither.lifecycle.guidance.types import (
+    FindingSummary,
+    GateResult,
+    NextEntity,
+    Outcome,
+    PlanningAgentResponse,
+    RecommendedMove,
+)
+from specsmither.lifecycle.operations_registry import OPERATIONS
+from specsmither.lifecycle.state_machine import is_terminal_phase, next_phase
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from specsmither.db.models import PlanningSession
+    from specsmither.lifecycle.gate import PhaseGateResult
+    from specsmither.lifecycle.ports import SpecFull, ValidatorFinding, ValidatorOutput
+    from specsmither.lifecycle.prechecks import Denied
+
+__all__ = [
+    "GetPlanningStatusComposition",
+    "compose_get_planning_status",
+    "compose_response",
+    "pick_get_planning_status_variant",
+]
+
+#: Default cap on the expansion-phase "next to work on" list (mirrors
+#: ``PLANNING_LIFECYCLE_DEFAULTS['guidance']['maxNextEntitiesToShow']``).
+_DEFAULT_MAX_NEXT_ENTITIES = 3
+
+#: Hard cap on finding-derived recommended moves (TS ``RECOMMENDED_MOVES_CAP``).
+_RECOMMENDED_MOVES_CAP = 3
+
+#: Hard cap on the summarized findings list (TS ``MAX_FINDINGS_PER_CATEGORY``, flattened).
+_MAX_FINDINGS = 20
+
+#: Human-readable phase names + 1-based indices (the generated TS ``PHASES`` catalog,
+#: trimmed to the two fields the prose reads). ``planned`` is the sentinel (index 0).
+_PHASE_META: dict[PlanningPhase, tuple[str, int]] = {
+    PlanningPhase.PLANNING_SPEC: ("Spec Definition", 1),
+    PlanningPhase.EPIC_DECOMPOSITION: ("Epic Decomposition", 2),
+    PlanningPhase.EPIC_EXPANSION: ("Epic Expansion", 3),
+    PlanningPhase.TICKET_DECOMPOSITION: ("Ticket Decomposition", 4),
+    PlanningPhase.TICKET_EXPANSION: ("Ticket Expansion", 5),
+    PlanningPhase.CROSS_VALIDATION: ("Cross-Validation", 6),
+    PlanningPhase.PLANNED: ("Planned", 0),
+}
+
+
+# --------------------------------------------------------------------------- #
+# Small display helpers (the TS resume-helpers.ts surface, trimmed)           #
+# --------------------------------------------------------------------------- #
+
+
+def _phase_human_name(phase: PlanningPhase) -> str:
+    """Human-readable phase name; falls back to the underscored key spelled out."""
+
+    meta = _PHASE_META.get(phase)
+    return meta[0] if meta else phase.value.replace("_", " ")
+
+
+def _phase_index(phase: PlanningPhase) -> int:
+    """1-based phase index (0 for the ``planned`` sentinel)."""
+
+    meta = _PHASE_META.get(phase)
+    return meta[1] if meta else 0
+
+
+def _native_ops_for_phase(phase: PlanningPhase) -> list[str]:
+    """Mutating operations whose native phase is ``phase``, in registry order."""
+
+    return [
+        op_def.name
+        for op_def in OPERATIONS.values()
+        if op_def is not None and op_def.kind == "mutating" and op_def.native_phase == phase
+    ]
+
+
+def _native_ops_inline(phase: PlanningPhase) -> str:
+    """Backtick-joined native ops for inline prose, e.g. ``\\`create_epic\\`, ...``."""
+
+    ops = _native_ops_for_phase(phase)
+    if not ops:
+        return "(none)"
+    return ", ".join(f"`{op}`" for op in ops)
+
+
+def _max_next_entities(lifecycle_config: Mapping[str, Any] | None) -> int:
+    """Read ``guidance.maxNextEntitiesToShow`` from the resolved config, with the default."""
+
+    if lifecycle_config is None:
+        return _DEFAULT_MAX_NEXT_ENTITIES
+    guidance = lifecycle_config.get("guidance")
+    if not isinstance(guidance, dict):
+        return _DEFAULT_MAX_NEXT_ENTITIES
+    value = guidance.get("maxNextEntitiesToShow")
+    return value if isinstance(value, int) and value >= 0 else _DEFAULT_MAX_NEXT_ENTITIES
+
+
+def _threshold_for_phase(
+    phase: PlanningPhase, validator_config: Mapping[str, Any] | None
+) -> float | None:
+    """Per-phase gate threshold from the validator config (``thresholdForPhase``)."""
+
+    if validator_config is None:
+        return None
+    thresholds = validator_config.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return None
+    if phase == PlanningPhase.PLANNING_SPEC:
+        return thresholds.get("specification")
+    if phase == PlanningPhase.EPIC_EXPANSION:
+        return thresholds.get("epic")
+    if phase == PlanningPhase.TICKET_EXPANSION:
+        return thresholds.get("ticket")
+    return 0
+
+
+def _fmt_score(score: float | None) -> str:
+    """Compact score label (``not yet scored`` when unknown)."""
+
+    if score is None:
+        return "not yet scored"
+    return f"{score:g}"
+
+
+def _fmt_threshold(threshold: float | None) -> str:
+    """Compact threshold label (``n/a`` when the validator config is absent)."""
+
+    if threshold is None:
+        return "n/a"
+    return f"{threshold:g}"
+
+
+# --------------------------------------------------------------------------- #
+# Structured side-block builders                                              #
+# --------------------------------------------------------------------------- #
+
+
+def _summarize_findings(findings: list[ValidatorFinding]) -> tuple[list[FindingSummary], str | None]:
+    """Flatten validator findings into capped :class:`FindingSummary` rows + a summary.
+
+    Mirrors ``composeFindingsBlock``: the summary line counts findings across distinct
+    categories; the list is capped at :data:`_MAX_FINDINGS` (deferring the rich
+    per-category grouping of the TS composer to a later milestone).
+    """
+
+    if not findings:
+        return [], None
+    categories = {f.category for f in findings}
+    summarized = [
+        FindingSummary(
+            category=str(f.category),
+            message=f.message,
+            severity=f.severity,
+            entity_id=f.entity_id,
+            path=f.path,
+        )
+        for f in findings[:_MAX_FINDINGS]
+    ]
+    summary = f"{len(findings)} finding(s) across {len(categories)} category/categories."
+    return summarized, summary
+
+
+def _recommended_moves(findings: list[ValidatorFinding]) -> list[RecommendedMove]:
+    """Finding-derived next-step hints (``composeRecommendedMoves``).
+
+    Sorts by ``global_impact_on_fix`` desc, then ``points_lost`` desc; maps each finding's
+    ``path`` to its fix operation via the audit operation-mapper; caps at
+    :data:`_RECOMMENDED_MOVES_CAP`. Findings with no path or no mapped op are skipped.
+    """
+
+    if not findings:
+        return []
+    ordered = sorted(
+        findings,
+        key=lambda f: ((f.global_impact_on_fix or 0.0), (f.points_lost or 0.0)),
+        reverse=True,
+    )
+    moves: list[RecommendedMove] = []
+    for finding in ordered:
+        if len(moves) >= _RECOMMENDED_MOVES_CAP:
+            break
+        if not finding.path:
+            continue
+        operation = map_path_to_operation(
+            finding.path,
+            MapperContext(
+                entity_type=finding.entity_type,
+                severity=finding.severity,
+                category=str(finding.category),
+            ),
+        )
+        if operation is None:
+            continue
+        moves.append(RecommendedMove(operation=operation, rationale=finding.message))
+    return moves
+
+
+def _next_entities(
+    gate_result: PhaseGateResult | None, cap: int
+) -> list[NextEntity]:
+    """Build the capped "next to work on" list from the gate's per-entity verdicts.
+
+    Entities still ``review_needed`` come first (they are what the agent must fix next),
+    then any cleared (``pass``) entities for context; the whole list is capped at ``cap``
+    (the configured ``maxNextEntitiesToShow``). Binary-phase gates carry no verdicts → ``[]``.
+    """
+
+    if gate_result is None or not gate_result.entity_verdicts:
+        return []
+    verdicts = sorted(
+        gate_result.entity_verdicts,
+        key=lambda v: 0 if v.verdict == "review_needed" else 1,
+    )
+    entities = [
+        NextEntity(
+            entity_id=v.entity_id,
+            entity_type=v.entity_type,
+            score=v.score,
+            hint=v.review_hints[0] if v.review_hints else None,
+        )
+        for v in verdicts
+    ]
+    return entities[:cap]
+
+
+# --------------------------------------------------------------------------- #
+# Prose bodies, keyed by variant                                              #
+# --------------------------------------------------------------------------- #
+
+
+def _compose_body(
+    *,
+    variant: GuidanceVariant,
+    phase: PlanningPhase,
+    score: float | None,
+    threshold: float | None,
+    gate: GateResult | None,
+    finding_count: int,
+    next_count: int,
+    denial: Denied | None,
+    feedback_content: str | None,
+    actions_count: int,
+    next_phase_label: str,
+) -> str:
+    """Render the terse English body for ``variant`` (the single-composer dispatch)."""
+
+    idx = _phase_index(phase)
+    human = _phase_human_name(phase)
+    native = _native_ops_inline(phase)
+    score_label = _fmt_score(score)
+    threshold_label = _fmt_threshold(threshold)
+    header = f"Phase {idx} of 6 — {human}"
+
+    if variant == GuidanceVariant.GATE_PASSED:
+        body = (
+            f"{header}: the gate is passing (score {score_label}, threshold {threshold_label}). "
+            f"Keep refining via {native}, or call `complete_planning_session` to hand the "
+            "specification to a human reviewer."
+        )
+        if next_count:
+            body += f" {next_count} entity/entities are listed for an optional final pass."
+        return body
+
+    if variant == GuidanceVariant.GATE_FAILED:
+        body = (
+            f"{header}: the gate is failing (score {score_label}, threshold {threshold_label}). "
+            f"Address the {finding_count} outstanding finding(s) via {native}, then re-run the "
+            "operation. See the recommended moves for the exact verb per finding."
+        )
+        return body
+
+    if variant == GuidanceVariant.DENIED:
+        message = denial.message if denial is not None else "The operation was denied."
+        body = f"Denied: {message}"
+        if denial is not None and denial.blockers:
+            joined = "; ".join(denial.blockers)
+            body += f" Blocking reasons: {joined}."
+        return body
+
+    if variant in (GuidanceVariant.PHASE_ADVANCE, GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE):
+        return (
+            f"Advanced to phase {idx} of 6 — {human}. Work this phase via {native}; "
+            "re-validate as you go and watch the gate before completing."
+        )
+
+    if variant == GuidanceVariant.PHASE_ROLLBACK:
+        return (
+            f"Rolled back to phase {idx} of 6 — {human} to apply a structural change native "
+            f"to that phase. Re-establish a passing gate via {native} before advancing again."
+        )
+
+    if variant in (GuidanceVariant.HUMAN_HANDOVER, GuidanceVariant.PHASE_COMPLETE):
+        return (
+            "The specification is ready for human review. Share it with a reviewer and poll "
+            "`get_planning_status` for their approve / reject decision."
+        )
+
+    if variant == GuidanceVariant.AWAITING_HUMAN_REVIEW_HANDOVER:
+        return (
+            "Awaiting human review. The specification is parked for a reviewer — do not keep "
+            f"editing unless asked. Poll `get_planning_status` for their decision. On approval: "
+            f"{next_phase_label}."
+        )
+
+    if variant in (GuidanceVariant.HUMAN_FEEDBACK, GuidanceVariant.HUMAN_FEEDBACK_RECEIVED):
+        quoted = f' "{feedback_content}"' if feedback_content else ""
+        return (
+            f"Human feedback received:{quoted} Incorporate it via {native} in {human}, then "
+            "re-validate and call `complete_planning_session` again."
+        )
+
+    if variant == GuidanceVariant.HUMAN_REJECTED_NO_FEEDBACK:
+        return (
+            "The human rejected the handover without written feedback. Ask them what needs "
+            f"rework, address it via {native} in {human}, then call `complete_planning_session` "
+            "again."
+        )
+
+    if variant == GuidanceVariant.SESSION_CLOSED:
+        return (
+            f"Planning session closed. Final phase {human}, score {score_label}, "
+            f"{actions_count} action(s) recorded. The specification is ready."
+        )
+
+    # GuidanceVariant.PHASE_STATUS_REPORT (and any unmatched variant).
+    gate_label = gate or "unknown"
+    if gate == "pass":
+        hint = (
+            "You may continue refining via the native operation(s), or call "
+            "`complete_planning_session` to hand off to the human."
+        )
+    elif gate == "fail":
+        hint = (
+            "Address the outstanding findings via the native operation(s), then call "
+            "`complete_planning_session`."
+        )
+    else:
+        hint = "Run any native operation to get an initial score."
+    return (
+        f"{header}: gate {gate_label}, score {score_label} (threshold {threshold_label}). "
+        f"{hint} Native operation(s): {native}."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The umbrella composer                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def compose_response(
+    *,
+    variant: GuidanceVariant,
+    session: PlanningSession,
+    spec_full: SpecFull | None = None,
+    validator_output: ValidatorOutput | None = None,
+    gate_result: PhaseGateResult | None = None,
+    denial: Denied | None = None,
+    lifecycle_config: Mapping[str, Any] | None = None,
+    validator_config: Mapping[str, Any] | None = None,
+    score_global: float | None = None,
+) -> PlanningAgentResponse:
+    """Compose the :class:`PlanningAgentResponse` a verb returns, keyed by ``variant``.
+
+    ``session`` supplies the post-mutation state echoed back (phase / status / cached
+    score+gate). ``validator_output`` (when the verb re-validated) supplies the fresh
+    score, gate verdict, and findings; otherwise the session's cached values are shown.
+    ``gate_result`` supplies the per-entity verdicts the ``next_entities`` block is built
+    from. ``denial`` carries the denial prose for the ``denied`` variant. ``next_entities``
+    is capped by ``lifecycle_config['guidance']['maxNextEntitiesToShow']`` (default 3);
+    ``recommended_moves`` and ``findings`` are derived from the validator findings.
+    """
+
+    phase = PlanningPhase(session.current_phase)
+    status = PlanningSessionStatus(session.status)
+    spec_id = spec_full.spec.id if spec_full is not None else session.specification_id
+
+    score = validator_output.local_score if validator_output is not None else session.last_score
+    if gate_result is not None:
+        gate: GateResult | None = gate_result.gate_outcome
+    elif validator_output is not None:
+        gate = validator_output.gate_result
+    else:
+        gate = _coerce_gate(session.last_gate_result)
+
+    findings = list(validator_output.findings) if validator_output is not None else []
+    summarized, findings_summary = _summarize_findings(findings)
+    moves = _recommended_moves(findings)
+    next_entities = _next_entities(gate_result, _max_next_entities(lifecycle_config))
+
+    feedback = session.pending_human_feedback
+    feedback_content = (
+        feedback.get("content") if isinstance(feedback, dict) else None
+    )
+
+    next_phase_label = _next_phase_label(phase)
+
+    body = _compose_body(
+        variant=variant,
+        phase=phase,
+        score=score,
+        threshold=_threshold_for_phase(phase, validator_config),
+        gate=gate,
+        finding_count=len(findings),
+        next_count=len(next_entities),
+        denial=denial,
+        feedback_content=feedback_content,
+        actions_count=session.actions_count or 0,
+        next_phase_label=next_phase_label,
+    )
+
+    outcome: Outcome = "denied" if variant == GuidanceVariant.DENIED else "success"
+
+    return PlanningAgentResponse(
+        outcome=outcome,
+        session_id=session.id,
+        spec_id=spec_id,
+        phase=phase,
+        status=status,
+        variant=variant,
+        guidance=body,
+        gate_result=gate,
+        score=score,
+        score_global=score_global,
+        next_entities=next_entities,
+        recommended_moves=moves,
+        findings=summarized,
+        findings_summary=findings_summary,
+    )
+
+
+def _coerce_gate(value: str | None) -> GateResult | None:
+    """Narrow a cached ``last_gate_result`` string to the typed :data:`GateResult`."""
+
+    if value == "pass":
+        return "pass"
+    if value == "fail":
+        return "fail"
+    return None
+
+
+def _next_phase_label(phase: PlanningPhase) -> str:
+    """The 'on approval, you advance to ...' label (the terminal phase closes the spec)."""
+
+    if is_terminal_phase(phase):
+        return "the specification is finalized (planning complete)"
+    nxt = next_phase(phase)
+    if nxt is None:
+        return "the specification is finalized (planning complete)"
+    return f"the session advances to {_phase_human_name(nxt)}"
+
+
+# --------------------------------------------------------------------------- #
+# get_planning_status — variant pick + read-only composition                  #
+# --------------------------------------------------------------------------- #
+
+
+def pick_get_planning_status_variant(session: PlanningSession) -> GuidanceVariant:
+    """Deterministically pick the get_planning_status variant from session state.
+
+    Pure function of the session (``pickGetPlanningStatusVariant``). Precedence:
+    ``closed`` → ``session_closed``; ``awaiting_human_review`` →
+    ``awaiting_human_review_handover``; active with pending feedback →
+    ``human_feedback_received``; active with an *unread* transition
+    (``last_read_at < last_transition_at``) triggered by ``human_approve`` →
+    ``phase_advanced_after_approve``; by ``human_reject_no_feedback`` →
+    ``human_rejected_no_feedback``; otherwise ``phase_status_report``.
+    """
+
+    if session.status == PlanningSessionStatus.CLOSED.value:
+        return GuidanceVariant.SESSION_CLOSED
+    if session.status == PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value:
+        return GuidanceVariant.AWAITING_HUMAN_REVIEW_HANDOVER
+
+    # session.status == 'active'
+    if session.pending_human_feedback:
+        return GuidanceVariant.HUMAN_FEEDBACK_RECEIVED
+
+    if _is_unread_transition(session):
+        if session.last_transition_trigger == TransitionTrigger.HUMAN_APPROVE.value:
+            return GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE
+        if session.last_transition_trigger == TransitionTrigger.HUMAN_REJECT_NO_FEEDBACK.value:
+            return GuidanceVariant.HUMAN_REJECTED_NO_FEEDBACK
+
+    return GuidanceVariant.PHASE_STATUS_REPORT
+
+
+def _is_unread_transition(session: PlanningSession) -> bool:
+    """Whether the latest transition has not yet been announced (``lastReadAt < lastTransitionAt``).
+
+    Timestamps are ISO-8601 strings (lexicographically ordered for a fixed format). A
+    missing ``last_transition_at`` means no transition to announce → ``False``; a missing
+    ``last_read_at`` means never read → the transition is unread → ``True``.
+    """
+
+    transition_at = session.last_transition_at
+    if transition_at is None:
+        return False
+    read_at = session.last_read_at
+    if read_at is None:
+        return True
+    return read_at < transition_at
+
+
+@dataclass(frozen=True)
+class GetPlanningStatusComposition:
+    """The read-only get_planning_status result + its one-shot write-plan side-effects.
+
+    ``response`` is the composed :class:`PlanningAgentResponse`; ``clear_pending_feedback``
+    instructs the write plan to null ``pending_human_feedback`` atomically with the audit
+    append (one-shot feedback delivery); ``bump_last_read_at`` instructs it to bump
+    ``last_read_at`` so a transition announcement is not repeated.
+    """
+
+    variant: GuidanceVariant
+    response: PlanningAgentResponse
+    clear_pending_feedback: bool
+    bump_last_read_at: bool
+
+
+def compose_get_planning_status(
+    session: PlanningSession,
+    *,
+    lifecycle_config: Mapping[str, Any] | None = None,
+    validator_config: Mapping[str, Any] | None = None,
+) -> GetPlanningStatusComposition:
+    """Compose the read-only get_planning_status response (``composeGetPlanningStatus``).
+
+    Picks the variant via :func:`pick_get_planning_status_variant`, composes the read-only
+    response from the session's cached state (never re-runs the validator), and flags the
+    one-shot side-effects: ``human_feedback_received`` clears the pending feedback;
+    ``phase_advanced_after_approve`` / ``human_rejected_no_feedback`` bump ``last_read_at``.
+    """
+
+    variant = pick_get_planning_status_variant(session)
+    clear_pending_feedback = variant == GuidanceVariant.HUMAN_FEEDBACK_RECEIVED
+    bump_last_read_at = variant in (
+        GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE,
+        GuidanceVariant.HUMAN_REJECTED_NO_FEEDBACK,
+    )
+    response = compose_response(
+        variant=variant,
+        session=session,
+        lifecycle_config=lifecycle_config,
+        validator_config=validator_config,
+    )
+    return GetPlanningStatusComposition(
+        variant=variant,
+        response=response,
+        clear_pending_feedback=clear_pending_feedback,
+        bump_last_read_at=bump_last_read_at,
+    )

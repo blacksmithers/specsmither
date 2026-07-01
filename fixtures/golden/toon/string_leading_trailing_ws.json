@@ -1,0 +1,6 @@
+{
+  "input": {
+    "s": " pad "
+  },
+  "expected": "s: \" pad \""
+}

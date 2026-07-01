@@ -1,0 +1,11 @@
+{
+  "input": [
+    {
+      "name": "x",
+      "child": {
+        "deep": 1
+      }
+    }
+  ],
+  "expected": "[1]:\n  - name: x\n    child:\n      deep: 1"
+}

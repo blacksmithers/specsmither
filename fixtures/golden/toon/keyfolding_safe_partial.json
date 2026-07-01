@@ -1,0 +1,14 @@
+{
+  "input": {
+    "wrapper": {
+      "inner": {
+        "x": 1,
+        "y": 2
+      }
+    }
+  },
+  "options": {
+    "key_folding": "safe"
+  },
+  "expected": "wrapper.inner:\n  x: 1\n  y: 2"
+}

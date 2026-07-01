@@ -52,6 +52,33 @@ Requires Python 3.11+. Determinism golden fixtures live in `fixtures/golden/`
 and are committed (regenerated from the TS reference via `tools/`); CI runs no
 Node.
 
+## Runtime & workspace
+
+SpecSmither keeps everything in **one user-global SQLite database** — a single
+`specsmither.db` that holds *every* project. A **workspace** is any directory
+bound to one project via `.specsmither/config.json`; different workspaces serve
+different projects off the same DB file (WAL + `BEGIN IMMEDIATE` make concurrent
+workspaces/agents on one file safe).
+
+```
+~/.specsmither/specsmither.db          # the single DB — all projects live here
+~/.specsmither/config.json             # global defaults
+<workspace>/.specsmither/config.json   # { "projectId": "…", "specificationId"?, … }
+```
+
+Running `init` in a workspace (once) lazily creates the DB if it's absent, then
+creates — or reuses — that workspace's project and writes the binding file.
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `SPECSMITHER_HOME` | SpecSmither home directory | `~/.specsmither` |
+| `SPECSMITHER_DB` | Explicit DB file (overrides `HOME`) | `$SPECSMITHER_HOME/specsmither.db` |
+| `SPECSMITHER_PROJECT` | Force the active project id (overrides the workspace file) | the workspace `config.json` |
+| `SPECSMITHER_MCP_FORMAT` | MCP wire encoding (`toon` / `json`) | `toon` |
+
+Resolution precedence is **env > project (`.specsmither/config.json`) > global
+(`~/.specsmither/config.json`) > default**.
+
 ## License
 
 Apache-2.0.

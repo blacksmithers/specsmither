@@ -1,0 +1,17 @@
+{
+  "input": [
+    {
+      "name": "group",
+      "members": [
+        {
+          "k": 1
+        },
+        {
+          "k": 2
+        }
+      ],
+      "note": "done"
+    }
+  ],
+  "expected": "[1]:\n  - name: group\n    members[2]{k}:\n      1\n      2\n    note: done"
+}

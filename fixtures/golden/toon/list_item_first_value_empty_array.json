@@ -1,0 +1,9 @@
+{
+  "input": [
+    {
+      "items": [],
+      "name": "x"
+    }
+  ],
+  "expected": "[1]:\n  - items[0]:\n    name: x"
+}

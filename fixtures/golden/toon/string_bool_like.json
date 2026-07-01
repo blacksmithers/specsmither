@@ -1,0 +1,6 @@
+{
+  "input": {
+    "s": "true"
+  },
+  "expected": "s: \"true\""
+}

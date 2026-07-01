@@ -1,0 +1,7 @@
+{
+  "input": {
+    "meta": {},
+    "name": "x"
+  },
+  "expected": "meta:\nname: x"
+}

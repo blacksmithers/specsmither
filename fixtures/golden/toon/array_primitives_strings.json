@@ -1,0 +1,8 @@
+{
+  "input": [
+    "ana",
+    "luis",
+    "sam"
+  ],
+  "expected": "[3]: ana,luis,sam"
+}

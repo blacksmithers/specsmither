@@ -1,0 +1,10 @@
+{
+  "input": [
+    1,
+    "two",
+    true,
+    null,
+    3.5
+  ],
+  "expected": "[5]: 1,two,true,null,3.5"
+}

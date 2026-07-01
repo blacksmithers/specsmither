@@ -1,0 +1,11 @@
+{
+  "input": {
+    "friends": [
+      "ana",
+      "luis",
+      "sam"
+    ],
+    "count": 3
+  },
+  "expected": "friends[3]: ana,luis,sam\ncount: 3"
+}

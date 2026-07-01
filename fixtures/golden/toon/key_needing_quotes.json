@@ -1,0 +1,8 @@
+{
+  "input": {
+    "weird key!": 1,
+    "a.b": 2,
+    "ok": 3
+  },
+  "expected": "\"weird key!\": 1\na.b: 2\nok: 3"
+}

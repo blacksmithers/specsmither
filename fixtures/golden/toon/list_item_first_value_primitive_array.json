@@ -1,0 +1,13 @@
+{
+  "input": [
+    {
+      "name": "x",
+      "nums": [
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "expected": "[1]:\n  - name: x\n    nums[3]: 1,2,3"
+}

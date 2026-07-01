@@ -25,6 +25,7 @@ No models live here.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -99,9 +100,28 @@ class JSONType(TypeDecorator[Any]):
         return json.loads(value)
 
 
+_ULID_LOCK = threading.Lock()
+_LAST_ULID: ULID | None = None
+
+
 def new_ulid() -> str:
-    """Return a fresh 26-char Crockford-base32 ULID string (lexicographically sortable)."""
-    return str(ULID())
+    """Return a fresh 26-char ULID string, STRICTLY monotonic (mint order == sort order).
+
+    ``ulid.ULID()`` is only monotonic across milliseconds — two ids minted in the
+    same millisecond fall back to random ordering. The append-only planning audit
+    rows (actions / transitions / datapoints) are read back ordered by id and
+    interleaved by the TUI; without a strict guarantee, two rows written in one
+    transaction (e.g. a phase-advance + the human-approve action) could sort in
+    either order, making the action log — and its snapshot — flaky. Bumping any
+    collision by one int makes lexicographic id order equal insertion order.
+    """
+    global _LAST_ULID
+    with _ULID_LOCK:
+        candidate = ULID()
+        if _LAST_ULID is not None and candidate <= _LAST_ULID:
+            candidate = ULID.from_int(int(_LAST_ULID) + 1)
+        _LAST_ULID = candidate
+        return str(candidate)
 
 
 def now_iso() -> str:

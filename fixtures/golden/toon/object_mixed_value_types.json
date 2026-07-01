@@ -1,0 +1,10 @@
+{
+  "input": {
+    "s": "txt",
+    "n": 12,
+    "f": 1.5,
+    "b": true,
+    "z": null
+  },
+  "expected": "s: txt\nn: 12\nf: 1.5\nb: true\nz: null"
+}
