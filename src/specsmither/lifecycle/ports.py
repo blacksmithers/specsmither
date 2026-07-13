@@ -49,9 +49,9 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from crucible.models import Specification
 
-from specsmither.adapters.write_plan_executor import WritePlan
 from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import FindingCategory, PlanningPhase
+from specsmither.lifecycle.write_plan_types import WritePlan
 
 __all__ = [
     "BlueprintRef",

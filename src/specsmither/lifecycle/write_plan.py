@@ -57,7 +57,17 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
-from specsmither.adapters.write_plan_executor import (
+from specsmither.domain.enums import (
+    ActorType,
+    EpicStatus,
+    PlanningPhase,
+    PlanningSessionStatus,
+    SpecStatus,
+    TicketStatus,
+    TransitionTrigger,
+)
+from specsmither.ids import new_ulid, now_iso
+from specsmither.lifecycle.write_plan_types import (
     ActionAppend,
     EntityDelete,
     EntityType,
@@ -71,16 +81,6 @@ from specsmither.adapters.write_plan_executor import (
     SpecMutation,
     WritePlan,
     WritePlanItem,
-)
-from specsmither.db.base import new_ulid, now_iso
-from specsmither.domain.enums import (
-    ActorType,
-    EpicStatus,
-    PlanningPhase,
-    PlanningSessionStatus,
-    SpecStatus,
-    TicketStatus,
-    TransitionTrigger,
 )
 
 if TYPE_CHECKING:

@@ -32,14 +32,14 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from specsmither.db.base import new_ulid
 from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import PlanningPhase
+from specsmither.ids import new_ulid
 
 if TYPE_CHECKING:
-    from specsmither.adapters.write_plan_executor import WritePlan
     from specsmither.lifecycle.guidance.types import PlanningAgentResponse
     from specsmither.lifecycle.ports import Clock, LifecyclePorts
+    from specsmither.lifecycle.write_plan_types import WritePlan
 
 __all__ = [
     "SessionNotFoundError",

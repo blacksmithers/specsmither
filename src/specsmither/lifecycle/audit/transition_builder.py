@@ -17,8 +17,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from specsmither.db.base import new_ulid, now_iso
 from specsmither.domain.enums import ActorType, PlanningPhase, TransitionTrigger
+from specsmither.ids import new_ulid, now_iso
 from specsmither.lifecycle.ports import Clock, IdGenerator
 
 __all__ = [

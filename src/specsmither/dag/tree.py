@@ -51,7 +51,7 @@ from specsmither.dag.critical_path import (
     find_cycles,
 )
 from specsmither.dag.types import DepEdge, EpicNode, TicketNode
-from specsmither.db.base import now_iso
+from specsmither.ids import now_iso
 
 __all__ = [
     "UNNUMBERED_PLACEHOLDER",

@@ -26,9 +26,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from specsmither.adapters.write_plan_executor import WritePlan
 from specsmither.domain.enums import PlanningPhase, PlanningSessionStatus
 from specsmither.lifecycle.guidance.types import PlanningAgentResponse
+from specsmither.lifecycle.write_plan_types import WritePlan
 
 __all__ = [
     "ApproveHandoverPayload",

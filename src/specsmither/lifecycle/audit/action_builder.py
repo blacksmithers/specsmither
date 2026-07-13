@@ -45,8 +45,8 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import Any
 
-from specsmither.db.base import new_ulid, now_iso
 from specsmither.domain.enums import ActorType, GuidanceVariant, Outcome, PlanningPhase
+from specsmither.ids import new_ulid, now_iso
 from specsmither.lifecycle.ports import Clock, IdGenerator, ValidatorOutput
 
 __all__ = [
