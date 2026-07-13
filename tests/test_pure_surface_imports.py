@@ -7,19 +7,17 @@ the pure verb surface and reports which heavy packages got pulled in.
 
 Current status:
 * ``textual`` / ``mcp`` — already fully decoupled -> these assertions PASS today.
-* ``sqlalchemy`` — still pulled via three sinks (the ``new_ulid``/``now_iso`` leaf,
-  the ``WritePlan`` dataclasses living in the executor module, and the ORM
-  ``PlanningSession`` constructed by the verbs). Marked ``xfail(strict=True)`` so it
-  FLIPS to a hard pass the moment the extraction cuts those edges — and fails loudly
-  if someone claims it is done while sqlalchemy is still on the path.
+* ``sqlalchemy`` — the three sinks are cut (the ``new_ulid``/``now_iso`` leaf, the
+  ``WritePlan`` dataclasses lifted out of the executor module, and the ORM
+  ``PlanningSession`` replaced by the pure ``PlanningSessionRecord`` on the verb
+  surface). The pure import path is now sqlalchemy-free, so this assertion is a
+  plain hard pass — it fails loudly if any edge regresses onto the path.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
-
-import pytest
 
 #: The pure surface a host embedder would import.
 _PURE_IMPORTS = (
@@ -60,11 +58,5 @@ def test_pure_surface_does_not_import_mcp() -> None:
     assert not _loaded_after_pure_import("mcp")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="sinks A/B/C not yet cut: new_ulid/now_iso in db.base, WritePlan dataclasses in "
-    "the executor module, and the ORM PlanningSession constructed by the verbs still pull "
-    "sqlalchemy onto the pure path. Flips to pass when the extraction lands.",
-)
 def test_pure_surface_does_not_import_sqlalchemy() -> None:
     assert not _loaded_after_pure_import("sqlalchemy")

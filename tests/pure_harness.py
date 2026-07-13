@@ -2,8 +2,8 @@
 
 This is the parity anchor for the ``specsmither-lifecycle`` extraction: it feeds
 each verb its state **as in-memory data** (a real :class:`SpecFull` built with
-:func:`build_spec_full`, a :class:`PlanningSession`, defaulted config) through a
-bag of fake ports, calls the verb directly, and hands back the returned
+:func:`build_spec_full`, a :class:`PlanningSessionRecord`, defaulted config) through
+a bag of fake ports, calls the verb directly, and hands back the returned
 :class:`WritePlan` — **no SQLite, no transaction, no persistence**. The verbs
 already satisfy the pure contract ``(payload, ports) -> {response, WritePlan}``;
 this harness exercises exactly that surface so the extraction can be proven
@@ -12,10 +12,10 @@ behaviour-preserving (the WritePlan a verb builds must not change).
 Two construction sites deliberately live in ONE place so the extraction touches
 only them:
 
-* :func:`make_planning_session` builds the session STATE object. Today that is the
-  SQLAlchemy ORM ``PlanningSession`` (the coupling the extraction removes); after
-  the ``PlanningSessionRecord`` refactor this becomes the pure record and every
-  test below keeps asserting the same WritePlans.
+* :func:`make_planning_session` builds the session STATE object — now the pure,
+  DB-free ``PlanningSessionRecord`` (the ORM coupling the extraction removed); the
+  concrete SQLite store maps its ORM row to the same record, and every test below
+  keeps asserting the same WritePlans.
 * :func:`pure_ports` wires the operations projector. Today it uses the adapter
   wrapper ``ProjectorOperationsLayer`` (which lives in the sqlalchemy-importing
   ``adapters`` module); after the extraction it points at the pure projector.
@@ -35,7 +35,6 @@ from crucible.models import Specification
 from crucible.models.enums import BlueprintCategory, Complexity, TicketType
 
 from specsmither.adapters.lifecycle_ports import ProjectorOperationsLayer, _spec_full_from_spec
-from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import PlanningPhase, PlanningSessionStatus, SpecStatus, TicketStatus
 from specsmither.domain.records import (
     BlueprintRecord,
@@ -46,6 +45,7 @@ from specsmither.domain.records import (
     build_spec_full,
 )
 from specsmither.lifecycle.ports import LifecyclePorts, SpecFull, ValidatorFinding, ValidatorOutput
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 __all__ = [
     "EPIC_ID",
@@ -129,19 +129,19 @@ class _FakeSpecStore:
 
 
 class _FakeSessionStore:
-    def __init__(self, session: PlanningSession | None) -> None:
+    def __init__(self, session: PlanningSessionRecord | None) -> None:
         self._session = session
 
-    def get_planning_session(self, session_id: str) -> PlanningSession | None:
+    def get_planning_session(self, session_id: str) -> PlanningSessionRecord | None:
         return self._session
 
-    def get_active_planning_session_by_spec(self, spec_id: str) -> PlanningSession | None:
+    def get_active_planning_session_by_spec(self, spec_id: str) -> PlanningSessionRecord | None:
         return self._session
 
-    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSession]:
+    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSessionRecord]:
         return [self._session] if self._session is not None else []
 
-    def list_planning_sessions_by_project(self, project_id: str) -> list[PlanningSession]:
+    def list_planning_sessions_by_project(self, project_id: str) -> list[PlanningSessionRecord]:
         return [self._session] if self._session is not None else []
 
 
@@ -171,12 +171,12 @@ class _DefaultConfigStore:
         return []
 
 
-def make_planning_session(**overrides: Any) -> PlanningSession:
+def make_planning_session(**overrides: Any) -> PlanningSessionRecord:
     """Build the session STATE object from plain fields (the ONE construction site).
 
-    Sets every attribute the verbs read to a concrete value (an un-flushed ORM row
-    would otherwise return ``None`` for defaulted columns). Swap the constructed type
-    here — not in any test — when the pure ``PlanningSessionRecord`` lands.
+    Returns the pure, DB-free :class:`PlanningSessionRecord` the verbs now read; the
+    concrete SQLite store maps its ORM row to the same record. Sets every attribute the
+    verbs read to a concrete value.
     """
     fields: dict[str, Any] = {
         "id": "sess-0001",
@@ -196,7 +196,7 @@ def make_planning_session(**overrides: Any) -> PlanningSession:
         "last_action_at": FIXED_NOW.isoformat(),
     }
     fields.update(overrides)
-    return PlanningSession(**fields)
+    return PlanningSessionRecord(**fields)
 
 
 def demo_spec_full(*, status: SpecStatus = SpecStatus.PLANNING) -> SpecFull:
@@ -254,7 +254,7 @@ def demo_spec_full(*, status: SpecStatus = SpecStatus.PLANNING) -> SpecFull:
 def pure_ports(
     *,
     spec_full: SpecFull | None = None,
-    session: PlanningSession | None = None,
+    session: PlanningSessionRecord | None = None,
     validator: StubValidator | None = None,
     id_generator: SeqIds | None = None,
 ) -> LifecyclePorts:

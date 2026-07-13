@@ -20,7 +20,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from specsmither.adapters.config import resolve_lifecycle_config, resolve_validator_config
-from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import (
     ActorType,
     GuidanceVariant,
@@ -32,6 +31,7 @@ from specsmither.domain.enums import (
 from specsmither.lifecycle.audit import build_action
 from specsmither.lifecycle.guidance.compose import compose_response
 from specsmither.lifecycle.prechecks import Denied, spec_status_check
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.lifecycle.verbs.support import (
     SpecNotFoundError,
     SpecNotInPlanningError,
@@ -133,7 +133,7 @@ def _create(
         "last_transition_at": now_iso,
         "last_read_at": now_iso,
     }
-    session_row = PlanningSession(**session_fields)
+    session_row = PlanningSessionRecord(**session_fields)
 
     response = compose_response(
         variant=GuidanceVariant.PHASE_STATUS_REPORT,
@@ -171,7 +171,7 @@ def _create(
 def _resume(
     ports: LifecyclePorts,
     *,
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],
     validator_config: Mapping[str, Any],
@@ -227,7 +227,7 @@ def _resume(
 def _deny_awaiting(
     ports: LifecyclePorts,
     *,
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],
     validator_config: Mapping[str, Any],

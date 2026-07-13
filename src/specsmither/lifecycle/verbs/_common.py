@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from specsmither.db.models import PlanningSession
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 if TYPE_CHECKING:
     from specsmither.domain.enums import PlanningPhase, PlanningSessionStatus
@@ -47,22 +47,22 @@ def fixed_clock(now: datetime) -> Clock:
 
 
 def post_state_view(
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     *,
     status: PlanningSessionStatus,
     current_phase: PlanningPhase,
     pending_human_feedback: dict[str, Any] | None,
-) -> PlanningSession:
-    """A transient :class:`PlanningSession` carrying the POST-mutation state, for composing.
+) -> PlanningSessionRecord:
+    """A transient :class:`PlanningSessionRecord` carrying the POST-mutation state, for composing.
 
     The verb's write plan persists exactly these fields; the agent response is composed
     from this view so it echoes the *new* phase / status / feedback rather than the
-    pre-mutation read. The clone is **never added** to the ORM session (a pure data
-    holder, not in the unit of work — it is never flushed), and carries only the handful
-    of attributes :func:`~specsmither.lifecycle.guidance.compose.compose_response` reads.
+    pre-mutation read. The clone is a pure data holder (never persisted), and carries
+    only the handful of attributes
+    :func:`~specsmither.lifecycle.guidance.compose.compose_response` reads.
     """
 
-    return PlanningSession(
+    return PlanningSessionRecord(
         id=session.id,
         specification_id=session.specification_id,
         status=status.value,

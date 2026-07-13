@@ -49,10 +49,10 @@ from specsmither.lifecycle.state_machine import is_terminal_phase, next_phase
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from specsmither.db.models import PlanningSession
     from specsmither.lifecycle.gate import PhaseGateResult
     from specsmither.lifecycle.ports import SpecFull, ValidatorFinding, ValidatorOutput
     from specsmither.lifecycle.prechecks import Denied
+    from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 __all__ = [
     "GetPlanningStatusComposition",
@@ -408,7 +408,7 @@ def _compose_body(
 def compose_response(
     *,
     variant: GuidanceVariant,
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     spec_full: SpecFull | None = None,
     validator_output: ValidatorOutput | None = None,
     gate_result: PhaseGateResult | None = None,
@@ -527,7 +527,7 @@ def _next_phase_label(phase: PlanningPhase) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def pick_get_planning_status_variant(session: PlanningSession) -> GuidanceVariant:
+def pick_get_planning_status_variant(session: PlanningSessionRecord) -> GuidanceVariant:
     """Deterministically pick the get_planning_status variant from session state.
 
     Pure function of the session (``pickGetPlanningStatusVariant``). Precedence:
@@ -557,7 +557,7 @@ def pick_get_planning_status_variant(session: PlanningSession) -> GuidanceVarian
     return GuidanceVariant.PHASE_STATUS_REPORT
 
 
-def _is_unread_transition(session: PlanningSession) -> bool:
+def _is_unread_transition(session: PlanningSessionRecord) -> bool:
     """Whether the latest transition has not yet been announced (``lastReadAt < lastTransitionAt``).
 
     Timestamps are ISO-8601 strings (lexicographically ordered for a fixed format). A
@@ -591,7 +591,7 @@ class GetPlanningStatusComposition:
 
 
 def compose_get_planning_status(
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     *,
     lifecycle_config: Mapping[str, Any] | None = None,
     validator_config: Mapping[str, Any] | None = None,

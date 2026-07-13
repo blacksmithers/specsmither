@@ -87,6 +87,7 @@ from specsmither.lifecycle.ports import (
     SpecFull,
     TicketRef,
 )
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.operations.errors import NotFoundError
 
 if TYPE_CHECKING:
@@ -236,6 +237,37 @@ def _spec_full_from_spec(spec: Specification) -> SpecFull:
 # --------------------------------------------------------------------------- #
 
 
+def _session_record_from_orm(row: PlanningSession) -> PlanningSessionRecord:
+    """Map an ORM ``PlanningSession`` row to the pure :class:`PlanningSessionRecord`.
+
+    The record mirrors the row field-for-field for everything the pure verb surface
+    reads, so this is a straight attribute copy — the boundary at which sqlalchemy
+    stops and the DB-free lifecycle path begins.
+    """
+    return PlanningSessionRecord(
+        id=row.id,
+        specification_id=row.specification_id,
+        status=row.status,
+        current_phase=row.current_phase,
+        started_at=row.started_at,
+        last_action_at=row.last_action_at,
+        completed_at=row.completed_at,
+        closed_at=row.closed_at,
+        last_score=row.last_score,
+        actions_count=row.actions_count,
+        pending_human_feedback=row.pending_human_feedback,
+        last_transition_trigger=row.last_transition_trigger,
+        last_transition_at=row.last_transition_at,
+        last_read_at=row.last_read_at,
+        last_validated_at=row.last_validated_at,
+        last_gate_result=row.last_gate_result,
+        last_validator_output=row.last_validator_output,
+        last_process_guidance=row.last_process_guidance,
+        last_lifecycle_planning_guidance=row.last_lifecycle_planning_guidance,
+        session_metadata=row.session_metadata,
+    )
+
+
 class SqlitePlanningSessionStore:
     """:class:`~specsmither.lifecycle.ports.PlanningSessionStore` over the M0 repo.
 
@@ -243,33 +275,39 @@ class SqlitePlanningSessionStore:
     the read-only ``planning_stores.PlanningSessionStore`` repo, adapting its
     raise-on-missing ``get`` to the port's ``| None`` contract and adding the
     by-project listing (a ``planning_sessions ⋈ specifications`` join — sessions
-    carry no denormalized ``project_id``).
+    carry no denormalized ``project_id``). Every ORM row crosses out to the pure
+    :class:`PlanningSessionRecord` here (via :func:`_session_record_from_orm`) so no
+    ORM instance ever reaches the DB-free verb surface.
     """
 
     def __init__(self, session: Session) -> None:
         self._session = session
         self._repo = PlanningSessionRepo(session)
 
-    def get_planning_session(self, session_id: str) -> PlanningSession | None:
+    def get_planning_session(self, session_id: str) -> PlanningSessionRecord | None:
         try:
-            return self._repo.get_planning_session(session_id)
+            row = self._repo.get_planning_session(session_id)
         except NotFoundError:
             return None
+        return _session_record_from_orm(row)
 
-    def get_active_planning_session_by_spec(self, spec_id: str) -> PlanningSession | None:
-        return self._repo.get_active_for_spec(spec_id)
+    def get_active_planning_session_by_spec(self, spec_id: str) -> PlanningSessionRecord | None:
+        row = self._repo.get_active_for_spec(spec_id)
+        return _session_record_from_orm(row) if row is not None else None
 
-    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSession]:
-        return self._repo.list_planning_sessions(specification_id=spec_id)
+    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSessionRecord]:
+        rows = self._repo.list_planning_sessions(specification_id=spec_id)
+        return [_session_record_from_orm(row) for row in rows]
 
-    def list_planning_sessions_by_project(self, project_id: str) -> list[PlanningSession]:
+    def list_planning_sessions_by_project(self, project_id: str) -> list[PlanningSessionRecord]:
         stmt = (
             select(PlanningSession)
             .join(SpecificationRow, PlanningSession.specification_id == SpecificationRow.id)
             .where(SpecificationRow.project_id == project_id)
             .order_by(PlanningSession.id.desc())
         )
-        return list(self._session.execute(stmt).scalars())
+        rows = self._session.execute(stmt).scalars()
+        return [_session_record_from_orm(row) for row in rows]
 
 
 # --------------------------------------------------------------------------- #

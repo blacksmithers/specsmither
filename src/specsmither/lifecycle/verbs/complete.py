@@ -45,8 +45,8 @@ from specsmither.lifecycle.write_plan import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from specsmither.db.models import PlanningSession
     from specsmither.lifecycle.ports import LifecyclePorts
+    from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 __all__ = ["complete_planning_session"]
 
@@ -121,7 +121,7 @@ def complete_planning_session(
 def _success(
     ports: LifecyclePorts,
     *,
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],
     validator_config: Mapping[str, Any],
@@ -177,7 +177,7 @@ def _success(
 
 def _denied(
     ports: LifecyclePorts,
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     denial: Denied,
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],

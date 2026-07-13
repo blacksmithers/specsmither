@@ -41,11 +41,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import PlanningPhase
 from specsmither.lifecycle.gate import evaluate_phase_gate_spec_wide
 from specsmither.lifecycle.ports import SpecFull, Validator
 from specsmither.lifecycle.prechecks.result import Accepted, Denied, PrecheckResult
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 __all__ = ["gate_currently_passing"]
 
@@ -95,7 +95,7 @@ def _entity_scoreboard(
 
 
 def gate_currently_passing(
-    session: PlanningSession,
+    session: PlanningSessionRecord,
     spec_full: SpecFull | None,
     validator: Validator,
     validator_config: Mapping[str, Any],

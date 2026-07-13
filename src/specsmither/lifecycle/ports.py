@@ -49,8 +49,8 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from crucible.models import Specification
 
-from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import FindingCategory, PlanningPhase
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.lifecycle.write_plan_types import WritePlan
 
 __all__ = [
@@ -271,13 +271,17 @@ class PlanningSessionStore(Protocol):
     plain lists locally.
     """
 
-    def get_planning_session(self, session_id: str) -> PlanningSession | None: ...
+    def get_planning_session(self, session_id: str) -> PlanningSessionRecord | None: ...
 
-    def get_active_planning_session_by_spec(self, spec_id: str) -> PlanningSession | None: ...
+    def get_active_planning_session_by_spec(
+        self, spec_id: str
+    ) -> PlanningSessionRecord | None: ...
 
-    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSession]: ...
+    def list_planning_sessions_by_spec(self, spec_id: str) -> list[PlanningSessionRecord]: ...
 
-    def list_planning_sessions_by_project(self, project_id: str) -> list[PlanningSession]: ...
+    def list_planning_sessions_by_project(
+        self, project_id: str
+    ) -> list[PlanningSessionRecord]: ...
 
 
 @runtime_checkable

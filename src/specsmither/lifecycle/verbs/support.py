@@ -17,9 +17,9 @@ pure utilities every verb shares:
 * :func:`touched_entity_ids` — the flat touched-id collection the gate consumes,
   derived per *effective* phase (spec id in spec/cross-validation, the edited entity
   id in the two expansion phases, ``[]`` for the binary decomposition phases).
-* :func:`echo_session` — a transient :class:`PlanningSession` carrying the
+* :func:`echo_session` — a transient :class:`PlanningSessionRecord` carrying the
   *post-mutation* phase / status / score the guidance composer echoes back (so a verb
-  never mutates the loaded ORM row to shape its response).
+  never mutates the loaded row to shape its response).
 * :func:`guidance_snapshot` — the latest-only ``{variant, body}`` guidance blob the
   write plan denormalises onto the session for later ``inspect`` / status display.
 """
@@ -32,9 +32,9 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from specsmither.db.models import PlanningSession
 from specsmither.domain.enums import PlanningPhase
 from specsmither.ids import new_ulid
+from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 if TYPE_CHECKING:
     from specsmither.lifecycle.guidance.types import PlanningAgentResponse
@@ -174,22 +174,22 @@ def touched_entity_ids(
 
 
 def echo_session(
-    base: PlanningSession,
+    base: PlanningSessionRecord,
     *,
     current_phase: PlanningPhase | str,
     status: str,
     last_score: float | None = None,
     last_gate_result: str | None = None,
     actions_count: int | None = None,
-) -> PlanningSession:
-    """A transient :class:`PlanningSession` carrying the post-mutation echo state.
+) -> PlanningSessionRecord:
+    """A transient :class:`PlanningSessionRecord` carrying the post-mutation echo state.
 
     The guidance composer derives the response's ``phase`` / ``status`` / cached
-    score+gate from a session row; a verb that mutates the session (APS / CPS) builds
-    this throwaway, **un-added** row so it never dirties the loaded ORM instance to
-    shape its response. Fields not overridden fall back to ``base``.
+    score+gate from a session record; a verb that mutates the session (APS / CPS) builds
+    this throwaway record so it never dirties the loaded row to shape its response.
+    Fields not overridden fall back to ``base``.
     """
-    return PlanningSession(
+    return PlanningSessionRecord(
         id=base.id,
         specification_id=base.specification_id,
         status=status,
