@@ -28,7 +28,9 @@ The checks (and what each consults):
 from __future__ import annotations
 
 from specsmither.lifecycle.prechecks.blueprint_epic_ratio import blueprint_epic_ratio
+from specsmither.lifecycle.prechecks.blueprint_link_refs_exist import blueprint_link_refs_exist
 from specsmither.lifecycle.prechecks.cascade_rules import cascade_rules
+from specsmither.lifecycle.prechecks.content_shape_valid import content_shape_valid
 from specsmither.lifecycle.prechecks.count_bounds import count_bounds
 from specsmither.lifecycle.prechecks.cross_cut_references import cross_cut_references
 from specsmither.lifecycle.prechecks.dependencies_batch import (
@@ -39,6 +41,9 @@ from specsmither.lifecycle.prechecks.dependencies_batch import (
     run_dependencies_batch,
     validate_dependencies_batch,
 )
+from specsmither.lifecycle.prechecks.entity_refs_exist import entity_refs_exist
+from specsmither.lifecycle.prechecks.enum_field_guards import enum_field_guards
+from specsmither.lifecycle.prechecks.field_shape_soft_deny import field_shape_soft_deny
 from specsmither.lifecycle.prechecks.gate_currently_passing import gate_currently_passing
 from specsmither.lifecycle.prechecks.operation_allowed import operation_allowed
 from specsmither.lifecycle.prechecks.result import Accepted, Denied, PrecheckResult
@@ -59,9 +64,14 @@ __all__ = [
     "PrecheckResult",
     "SpecStatusVerb",
     "blueprint_epic_ratio",
+    "blueprint_link_refs_exist",
     "cascade_rules",
+    "content_shape_valid",
     "count_bounds",
     "cross_cut_references",
+    "entity_refs_exist",
+    "enum_field_guards",
+    "field_shape_soft_deny",
     "gate_currently_passing",
     "operation_allowed",
     "recovery_hint_for_status",

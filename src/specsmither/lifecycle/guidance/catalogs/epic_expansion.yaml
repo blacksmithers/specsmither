@@ -1,0 +1,197 @@
+# Phase: epic_expansion — Full content per guidance-catalog-v2.md §2.3
+# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/epic-expansion.ts
+
+phaseHumanName: "Epic Expansion"
+phaseIndex: 3
+phaseGoal: "Fill each epic's body — architecture, scope, BDD acceptance criteria, validation commands, API contracts, shared patterns, coverage references, file structures."
+phaseCharacter: "validator scores per-epic; gate evaluation is per touched epic (all touched must pass)."
+
+fields:
+  - field: epic.architecture
+    required: false
+    naEligible: true
+    tier: critical
+    shape: "string (markdown allowed)"
+    description: "Epic-level architecture decisions, refining the spec-level architecture for this epic's scope."
+    interview_hooks:
+      - "How does this epic fit into the broader architecture?"
+      - "What's special about this epic's data flow / components?"
+    na_when: "epic is trivial (e.g., shared types epic with no logic)"
+    examples:
+      - "OAuth2 PKCE flow via Cognito; tokens stored client-side in httpOnly cookies; refresh handled by middleware."
+
+  # ME.0-3 T-V.11 — epic.scope composite retired; decomposed into 4
+   # sub-entries mirroring T-V.10's spec.scope decomposition.
+  - field: epic.scope.inScope
+    required: true
+    minCount: 3
+    tier: critical
+    shape: "array of strings"
+    description: "Epic-level in-scope items. Bind tickets to this epic's slice of the spec and prevent ticket drift during expansion. ScopeSchema enforces >= 3 entries."
+    interview_hooks:
+      - "What does THIS epic own that no other epic does?"
+    na_when: "never (required field once epic.scope is populated)"
+    naEligible: false
+    examples:
+      - "['JWT signing middleware', 'refresh-token rotation', 'session revocation API']"
+
+  - field: epic.scope.outOfScope
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of strings"
+    description: "Explicit non-goals at the epic level. Prevents ticket creep into adjacent epics."
+    interview_hooks:
+      - "What might a contributor expect this epic to do but it doesn't?"
+    na_when: "never (required field once epic.scope is populated)"
+    naEligible: false
+    examples:
+      - "['user registration UI', 'password reset flow (handled by separate epic)']"
+
+  - field: epic.scope.assumptions
+    required: false
+    naEligible: true
+    shape: "array of strings"
+    description: "Epic-specific assumptions worth surfacing for challenge during planning."
+    na_when: "epic carries no scoping assumptions of its own — provide >=20-char rationale"
+    examples:
+      - "['identity provider already configured at the spec level']"
+
+  - field: epic.scope.externalDependencies
+    required: false
+    naEligible: true
+    shape: "array of strings"
+    description: "Epic-specific external dependencies (libraries, sibling-epic outputs). Shape integration risk for this epic."
+    na_when: "epic has no external dependencies of its own — provide >=20-char rationale"
+    examples:
+      - "['outputs of @specforge/types epic for the User shape']"
+
+  - field: epic.goals
+    required: false
+    naEligible: true
+    # ME.0-3 T-V.5 — promoted from enrichment → recommended; epic-specific
+    # goals are a planning signal, not enrichment.
+    tier: recommended
+    shape: "array of {title, description, type, successCriteria[], kpi?}"
+    description: "Epic-specific goals with success criteria. Most epics inherit from spec.goals via goalsCovered; declare your own when this epic owns a goal the spec doesn't enumerate. `id` is auto-assigned internally — never pass it."
+    na_when: "epic goals fully captured by spec.goals + goalsCovered — provide >=20-char rationale"
+    examples:
+      - "{ title: 'p99 token refresh < 50ms', description: 'Refresh latency budget for live sessions', type: 'technical', successCriteria: ['p99 < 50ms over 7-day window'] }"
+
+  - field: epic.acceptanceCriteria
+    required: false
+    naEligible: false
+    # ME.0-3 T-V.4 — promoted from recommended → critical; epic-level AC is
+    # the gate signal that the epic is verifiable end-to-end.
+    tier: critical
+    shape: "array of {given, when, then, order?}"
+    description: "Epic-level BDD AC defining when this epic is complete. `id` is auto-assigned internally — never pass it. `order` is optional: auto-populated by position if omitted, or set it to control ordering."
+    interview_hooks:
+      - "How do we verify this epic end-to-end?"
+    na_when: "never (critical field)"
+    examples:
+      - "{ given: 'expired access token', when: 'client calls refresh endpoint', then: 'new token issued within 50ms' }"
+
+  - field: epic.validationCommands
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of strings (CLI commands)"
+    description: "Commands that validate this epic — typecheck, lint, test, build, etc."
+    interview_hooks:
+      - "What commands prove this epic is healthy?"
+    na_when: "validation handled at spec level only"
+    examples:
+      - "['pnpm -F @specforge/auth test', 'pnpm -F @specforge/auth build']"
+
+  - field: epic.apiContracts
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of {name, type, schemaRef?, description?} — type ∈ rest | graphql | rpc | event | cli (LOWERCASE — 'REST' is rejected)"
+    description: "Public API contracts this epic exposes. 5 type values."
+    na_when: "epic exposes no API (internal-only)"
+    examples: []
+
+  # ME.0-3 T-S.1 / T-V.1 — SharedPattern redesigned: `blueprintReferences[]?`
+  # dropped; the 5 inheritance slots (codeStandards, commonImports,
+  # returnTypes, additionalImports, commonFiles) carry the conventions the
+  # cut top-level Spec fields used to hold. Epic.sharedPatterns merges with
+  # spec.sharedPatterns by name (epic overrides win).
+  - field: epic.sharedPatterns
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of {name, description, codeStandards?, commonImports?, returnTypes?, additionalImports?, commonFiles?}"
+    description: "Reusable patterns within the epic. Each pattern carries 5 optional inheritance slots: codeStandards (errorHandling/naming/language + free string keys), commonImports (string[]), returnTypes (Record<string,string>), additionalImports (string[]), commonFiles (Record<string,string>). Merges with spec.sharedPatterns by name — epic overrides win on matching name. `id` is auto-assigned internally — never pass it."
+    interview_hooks:
+      - "What patterns from spec.sharedPatterns does this epic override or extend?"
+      - "What epic-local conventions do all tickets in this epic share?"
+    na_when: "epic adds nothing on top of spec.sharedPatterns — provide >=20-char rationale"
+    examples:
+      - "{ name: 'Event handler middleware', description: 'Wrap every handler with logging + retry', codeStandards: { errorHandling: 'wrap in tryCatch and emit metric on failure' }, commonImports: ['withLogging', 'withRetry'] }"
+
+  - field: epic.requirementsCovered
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of requirementIds (FK to spec.requirements)"
+    description: "Which spec.requirements this epic covers. D10 — cross-cut coverage tracking."
+    na_when: "epic is foundational/scaffolding only"
+    examples: []
+
+  - field: epic.nfrsCovered
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of nfrIds (FK to spec.nonFunctionalRequirements)"
+    description: "Which NFRs this epic addresses."
+    na_when: "no NFRs apply to this epic"
+    examples: []
+
+  - field: epic.goalsCovered
+    required: false
+    naEligible: true
+    tier: recommended
+    shape: "array of goalIds (FK to spec.goals)"
+    description: "Which spec.goals this epic advances."
+    na_when: "epic doesn't directly advance any top-level goal"
+    examples: []
+
+  - field: epic.category
+    required: false
+    shape: "enum: 'foundation' | 'feature' | 'integration' | 'platform' | 'experimental'"
+    description: "Loose categorisation for reporting."
+    naEligible: false
+    examples: []
+
+  - field: epic.fileStructures
+    required: false
+    naEligible: true
+    shape: "array of {scope, description?, content} — scope = the package/dir path, content = the files/modules inside"
+    description: "Per-epic file structure. Refines spec.folderStructures with epic-specific files. M4.17. `id` is auto-assigned internally — never pass it."
+    na_when: "epic does not own new code (e.g., docs-only epic)"
+    examples:
+      - "[{scope: 'packages/auth', description: 'JWT signing/verification', content: 'jwt.ts (sign/verify), refresh.ts (rotation), types.ts'}]"
+
+coverage_invariant: "D10 — requirementsCovered + nfrsCovered + goalsCovered tracked but not enforced at engine level (was, removed in M4.10). Validator emits findings if obvious gaps but doesn't block on coverage alone."
+
+handover_summary: "Epics expanded with architecture, scope, criteria, contracts, patterns, coverage, and file detail. {blueprintCount} blueprints linked. Coverage gaps: {coverageGaps}."
+
+feedback_likely_areas: "epic.architecture, epic.scope, epic.acceptanceCriteria, epic.validationCommands, epic.apiContracts, epic.sharedPatterns, epic.requirementsCovered / nfrsCovered / goalsCovered, epic.fileStructures"
+
+post_approval_actions:
+  - "Agent starts phase 4 (ticket_decomposition) — break each epic into atomic tickets"
+  - "Typical actions: create_ticket (header-only — body in Phase 5)"
+
+gate_failed_body: |
+  Your role: enrich each epic with body fields. Validator scores **per epic** — touched epics must each pass.
+
+  **Approach:**
+  1. **Pick one epic, fill its body.** Iterate epic by epic, not field by field across all epics.
+  2. **AC in BDD format** ({given, when, then}). Order is auto.
+  3. **Coverage tracking matters.** requirementsCovered / nfrsCovered / goalsCovered surface in cross-validation (Phase 6).
+  4. **NA when honestly N/A.** Don't pad — declare via `update_epic` with `fieldDeclarations: { "<field>": { "value": "N/A", "reason": "<≥20 chars>" } }`.
+  5. **fileStructures (M4.17)** — list this epic's files. NA-eligible for docs-only epics.
+
+  Gate: per-epic score ≥ {threshold}/100. All touched epics must pass before CPS.

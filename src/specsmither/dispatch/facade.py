@@ -286,7 +286,16 @@ class Dispatcher:
         except Exception as exc:
             # A domain error is CONTENT (a standard_error envelope), never raised to the
             # protocol — this single boundary guarantees that invariant for every tool.
-            return self._error_envelope(*self._normalise(exc, tool))
+            code, message, guidance, context = self._normalise(exc, tool)
+            if str(code) == "INTERNAL":
+                # An unexpected exception (a bug, not a domain error) — log the traceback to
+                # stderr so it is diagnosable instead of vanishing behind an opaque envelope.
+                import sys
+                import traceback
+
+                print(f"[specsmither] INTERNAL error in tool {tool!r}:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+            return self._error_envelope(code, message, guidance, context)
 
     # ---------------------------------------------------------------------------------- #
     # Lifecycle — planning verbs (forward verbatim; denial rides the same envelope).      #

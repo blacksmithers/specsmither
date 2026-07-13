@@ -106,6 +106,7 @@ __all__ = [
     "build_sps_create_write_plan",
     "build_sps_deny_awaiting_write_plan",
     "build_sps_resume_write_plan",
+    "ensure_item_ids",
     "extract_mutation_target",
     "resolve_aps_mutation",
 ]
@@ -251,6 +252,93 @@ class ApsRollback:
 # --------------------------------------------------------------------------- #
 
 
+#: MB.1.1 — spec/epic array-of-object content fields whose crucible sub-models require a
+#: schema-internal ``id`` (and, for acceptance criteria, a positional ``order``). An agent
+#: may author these items WITHOUT the id/order (the wire schema does not force them); the
+#: read boundary (crucible sub-models) then silently drops the whole array to ``None`` — so
+#: the authored content vanishes and the gate can never score it, stalling the drive. The
+#: write-boundary filler mints the ids/orders BEFORE the write so every array round-trips.
+#: Names are the camelCase wire keys (``update_spec`` / ``update_epic`` ``fields``).
+_ID_ONLY_ARRAY_FIELDS = (
+    "goals",
+    "nonFunctionalRequirements",
+    "guardrails",
+    "techStack",
+    "folderStructures",
+    "fileStructures",
+    "apiContracts",
+    "sharedPatterns",
+)
+_ID_ORDER_ARRAY_FIELDS = ("acceptanceCriteria",)
+
+
+def _fill_item_ids(
+    items: Sequence[Any], id_generator: IdGenerator | None, *, order: bool
+) -> list[Any]:
+    """Mint a missing ``id`` (+ positional ``order`` when ``order``) into each mapping item."""
+    out: list[Any] = []
+    for i, item in enumerate(items):
+        if isinstance(item, Mapping):
+            d = dict(item)
+            if not d.get("id"):
+                d["id"] = _mint(id_generator)
+            if order and d.get("order") is None:
+                d["order"] = i + 1
+            out.append(d)
+        else:
+            out.append(item)
+    return out
+
+
+def ensure_item_ids(
+    fields: Mapping[str, Any], *, id_generator: IdGenerator | None = None
+) -> dict[str, Any]:
+    """MB.1.1 write-boundary filler: mint schema-required id/order into spec/epic arrays.
+
+    Returns a shallow copy of ``fields`` with an ``id`` minted into every id-bearing
+    array-of-object content field (and an ``order`` into acceptance criteria), including
+    the nested ``requirements[].acceptanceCriteria[]``. Non-array / string-array fields
+    (``requirementsCovered``, ``validationCommands``, ``tags`` …) are left untouched.
+    """
+    out = dict(fields)
+    for name in _ID_ONLY_ARRAY_FIELDS:
+        if isinstance(out.get(name), list):
+            out[name] = _fill_item_ids(out[name], id_generator, order=False)
+    # MB.1.2 — normalise apiContracts[].type case at the write boundary (REST -> rest) so a
+    # correctly-cased-but-uppercase value round-trips through the crucible enum on read; a
+    # value still off-enum after folding is soft-denied upstream (field_shape_soft_deny).
+    contracts = out.get("apiContracts")
+    if isinstance(contracts, list):
+        normalised: list[Any] = []
+        for contract in contracts:
+            if isinstance(contract, Mapping) and isinstance(contract.get("type"), str):
+                c = dict(contract)
+                c["type"] = c["type"].lower()
+                normalised.append(c)
+            else:
+                normalised.append(contract)
+        out["apiContracts"] = normalised
+    for name in _ID_ORDER_ARRAY_FIELDS:
+        if isinstance(out.get(name), list):
+            out[name] = _fill_item_ids(out[name], id_generator, order=True)
+    reqs = out.get("requirements")
+    if isinstance(reqs, list):
+        new_reqs: list[Any] = []
+        for req in reqs:
+            if isinstance(req, Mapping):
+                d = dict(req)
+                if not d.get("id"):
+                    d["id"] = _mint(id_generator)
+                nested = d.get("acceptanceCriteria")
+                if isinstance(nested, list):
+                    d["acceptanceCriteria"] = _fill_item_ids(nested, id_generator, order=True)
+                new_reqs.append(d)
+            else:
+                new_reqs.append(req)
+        out["requirements"] = new_reqs
+    return out
+
+
 def build_create_persist(
     op: str,
     payload: Mapping[str, Any] | None,
@@ -305,7 +393,11 @@ def build_create_persist(
                 "description": p.get("description", ""),
                 "status": TicketStatus.READY.value,
                 "planning_type": "planning",
-                "ticket_type": "implementation",
+                # ticketType is CREATE-only (00c468fe): honour a 'verification' request so the
+                # impl:verification ratio gate is satisfiable; default 'implementation'.
+                "ticket_type": (
+                    "verification" if p.get("ticketType") == "verification" else "implementation"
+                ),
                 "tags": [],
                 "progress": 0,
                 "created_at": now,
@@ -553,6 +645,34 @@ def build_op_write_items(op: str, payload: Mapping[str, Any] | None) -> OpWriteI
             ]
         )
 
+    if op in ("link_blueprint_to_tickets", "unlink_blueprint_to_tickets"):
+        # MB.2 — a real relational write: one ticket_blueprint_refs join row per target
+        # ticket, deterministic id f"{ticket_id}-br-{blueprint_id}" (idempotent link /
+        # keyed unlink), instead of the old no-op single-entity mutation. Without this the
+        # cross_validation blueprint-coverage check never accumulates and the loop stalls.
+        blueprint_id = p.get("blueprintId")
+        ticket_ids = p.get("ticketIds") or []
+        if not isinstance(blueprint_id, str):
+            return OpWriteItems()
+        linking = op == "link_blueprint_to_tickets"
+        link_items: list[WritePlanItem] = []
+        for tid in ticket_ids:
+            if not isinstance(tid, str):
+                continue
+            ref_id = f"{tid}-br-{blueprint_id}"
+            if linking:
+                link_items.append(
+                    RelatedPut(
+                        table="ticket_blueprint_refs",
+                        item={"id": ref_id, "ticket_id": tid, "blueprint_id": blueprint_id},
+                    )
+                )
+            else:
+                link_items.append(
+                    RelatedDelete(table="ticket_blueprint_refs", key={"id": ref_id})
+                )
+        return OpWriteItems(extra_items=link_items)
+
     if op == "update_ticket":
         fields = p.get("fields")
         ticket_id = p.get("id")
@@ -568,6 +688,13 @@ def extract_mutation_target(
 ) -> tuple[EntityType, str]:
     """Resolve the (entity_type, entity_id) a non-create op mutates (``extractMutationTarget``)."""
     p = payload or {}
+    # MB.2 — link/unlink are RELATIONAL ops that mutate no single entity's fields; their
+    # target must resolve to the always-existing spec BEFORE the substring fall-throughs
+    # below (``'ticket' in 'link_blueprint_to_TICKETS'`` would otherwise build a phantom
+    # Ticket keyed by the blueprintId → a NOT-NULL IntegrityError on every valid link id).
+    if op in ("link_blueprint_to_tickets", "unlink_blueprint_to_tickets"):
+        return ("spec", specification_id)
+
     raw_id = p.get("id")
     if isinstance(raw_id, str):
         entity_id = raw_id
@@ -618,6 +745,10 @@ def resolve_aps_mutation(
         if op_items.fields_override is not None
         else mutation_fields
     )
+    # MB.1.1 — mint schema-required id/order into spec/epic content arrays before the
+    # write (tickets are handled by _decompose_update_ticket, which already stamps ids).
+    if entity_type in ("spec", "epic"):
+        effective_fields = ensure_item_ids(effective_fields, id_generator=id_generator)
     return ApsMutation(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -841,6 +972,12 @@ def build_cps_success_write_plan(
     """
     fields = _guidance_fields(process_guidance, lifecycle_planning_guidance)
     fields["status"] = PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value
+    # #8 — CPS success is only reachable past the gate-currently-passing check, so the
+    # gate is PASS at park time. Persist it (+ last_validated_at) so approve_handover's
+    # gate-on-pass guard doesn't refuse a handover this CPS just green-lit when the
+    # prior APS left last_gate_result='fail'.
+    fields["last_gate_result"] = "pass"
+    fields["last_validated_at"] = action.get("created_at")
     fields["last_action_at"] = action.get("created_at")
     return WritePlan(
         [

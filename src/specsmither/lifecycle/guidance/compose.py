@@ -33,6 +33,8 @@ from specsmither.domain.enums import (
     TransitionTrigger,
 )
 from specsmither.lifecycle.audit import MapperContext, map_path_to_operation
+from specsmither.lifecycle.gate import evaluate_phase_gate_spec_wide
+from specsmither.lifecycle.guidance.field_instructions import compose_field_instructions
 from specsmither.lifecycle.guidance.types import (
     FindingSummary,
     GateResult,
@@ -265,6 +267,22 @@ def _next_entities(
 # --------------------------------------------------------------------------- #
 
 
+def _append_field_instructions(body: str, phase: PlanningPhase) -> str:
+    """Append the rich per-field guidance block for ``phase`` to a terse variant body.
+
+    Ports SpecForge's M8.6.1 behaviour — the phase's field catalog (shape, required/optional,
+    minimum count, N/A mechanism, tier, examples) is delivered *through the prose* so the
+    actor fills without guessing. 0.1.x renders the full phase catalog (no spec snapshot →
+    no state detection); :func:`compose_field_instructions` supports snapshot-filtered
+    rendering for a later milestone. Phases with no catalog (``planned``) add nothing.
+    """
+
+    block = compose_field_instructions(phase.value)
+    if not block:
+        return body
+    return f"{body}\n\n{block}"
+
+
 def _compose_body(
     *,
     variant: GuidanceVariant,
@@ -296,6 +314,9 @@ def _compose_body(
         )
         if next_count:
             body += f" {next_count} entity/entities are listed for an optional final pass."
+        # NB: the rich field catalog is NOT appended on a PASS — repeating the full ~11KB
+        # per-field guidance after every successful edit induces churn (the agent re-edits an
+        # already-passing entity). It rides GATE_FAILED (where the agent needs it) instead.
         return body
 
     if variant == GuidanceVariant.GATE_FAILED:
@@ -304,7 +325,7 @@ def _compose_body(
             f"Address the {finding_count} outstanding finding(s) via {native}, then re-run the "
             "operation. See the recommended moves for the exact verb per finding."
         )
-        return body
+        return _append_field_instructions(body, phase)
 
     if variant == GuidanceVariant.DENIED:
         message = denial.message if denial is not None else "The operation was denied."
@@ -415,7 +436,22 @@ def compose_response(
     if gate_result is not None:
         gate: GateResult | None = gate_result.gate_outcome
     elif validator_output is not None:
-        gate = validator_output.gate_result
+        # Report the PHASE-GATE verdict, not the validator's composite ``gate_result``:
+        # at the ``*_expansion`` phases the composite folds in the global cascade
+        # (topology/DAG), which is NOT part of the phase-completion gate — surfacing it
+        # here produced a self-contradiction ("gate failing, score 100 / threshold 70").
+        # Recompute the spec-wide phase gate so the status report agrees with what
+        # ``complete_planning_session`` will actually decide. Falls back to the composite
+        # when the spec could not be loaded (no per-entity ids to evaluate).
+        if spec_full is not None and validator_config is not None:
+            gate = evaluate_phase_gate_spec_wide(
+                current_phase=phase,
+                validator_output=validator_output,
+                spec_full=spec_full,
+                validator_config=validator_config,
+            ).gate_outcome
+        else:
+            gate = validator_output.gate_result
     else:
         gate = _coerce_gate(session.last_gate_result)
 

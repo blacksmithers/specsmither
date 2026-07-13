@@ -489,3 +489,73 @@ def test_gate_currently_passing_no_spec_full_denied() -> None:
     assert validator.calls == 0
     assert isinstance(result, Denied)
     assert result.code == "gate_not_passed"
+
+
+# --------------------------------------------------------------------------- #
+# gate_currently_passing routes through the PHASE-GATE evaluator, not the      #
+# validator's composite gate_result (simulator find 2026-07-13).              #
+# The ``*_expansion`` phases gate on spec-wide per-entity all-pass and EXCLUDE #
+# the global cascade (topology / dependency DAG), which is enforced only at    #
+# cross_validation. Otherwise ticket_expansion can never complete while the    #
+# tickets are still islands (global score 0 before the DAG is wired).          #
+# --------------------------------------------------------------------------- #
+
+_THRESH_CONFIG: dict[str, Any] = {"thresholds": {"specification": 80, "epic": 70, "ticket": 70}}
+
+
+def _expansion_session() -> PlanningSession:
+    return PlanningSession(
+        specification_id="spec-1",
+        current_phase=PlanningPhase.TICKET_EXPANSION.value,
+        last_gate_result="fail",
+        last_validated_at="2026-07-13T00:00:00Z",
+    )
+
+
+def _te_output(gate_result: str, per_ticket_score: dict[str, float]) -> ValidatorOutput:
+    return ValidatorOutput(
+        gate_result=gate_result,  # type: ignore[arg-type]
+        local_score=0.0,
+        per_epic_score={},
+        per_ticket_score=per_ticket_score,
+        findings=[],
+        validated_phase=PlanningPhase.TICKET_EXPANSION,
+    )
+
+
+def test_ticket_expansion_gate_passes_on_all_pass_despite_cascade_fail() -> None:
+    # Every ticket clears the threshold, but the validator's composite gate_result
+    # is 'fail' because the global cascade (topology penalty: tickets are islands,
+    # no dependency DAG yet) drives the global score below 80. The phase gate for
+    # ticket_expansion must IGNORE the cascade → the phase completes; the DAG is
+    # wired later at cross_validation.
+    full = _spec_full(epics=[_epic("e1", [_ticket("t1", "e1"), _ticket("t2", "e1")])])
+    validator = _FakeValidator(_te_output("fail", {"t1": 100.0, "t2": 100.0}))
+    result = gate_currently_passing(_expansion_session(), full, validator, _THRESH_CONFIG)
+    assert result == Accepted()
+
+
+def test_ticket_expansion_gate_fails_when_a_ticket_is_below_threshold() -> None:
+    # Spec-wide all-pass: one ticket short → the phase gate fails regardless of the
+    # (here 'pass') composite gate_result.
+    full = _spec_full(epics=[_epic("e1", [_ticket("t1", "e1"), _ticket("t2", "e1")])])
+    validator = _FakeValidator(_te_output("pass", {"t1": 100.0, "t2": 50.0}))
+    result = gate_currently_passing(_expansion_session(), full, validator, _THRESH_CONFIG)
+    assert isinstance(result, Denied)
+    assert result.code == "gate_not_passed"
+
+
+def test_cross_validation_gate_still_enforces_the_cascade() -> None:
+    # By contrast, at cross_validation the gate DEFERS to the composite gate_result,
+    # so a failing cascade (the DAG check) still blocks the close.
+    session = PlanningSession(
+        specification_id="spec-1",
+        current_phase=PlanningPhase.CROSS_VALIDATION.value,
+        last_gate_result="pass",
+        last_validated_at="2026-07-13T00:00:00Z",
+    )
+    full = _spec_full(epics=[_epic("e1", [_ticket("t1", "e1")])])
+    validator = _FakeValidator(_output("fail"))
+    result = gate_currently_passing(session, full, validator, _THRESH_CONFIG)
+    assert isinstance(result, Denied)
+    assert result.code == "gate_not_passed"

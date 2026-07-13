@@ -1,0 +1,137 @@
+# Phase: ticket_decomposition — Full content per guidance-catalog-v2.md §2.4
+# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/ticket-decomposition.ts
+
+phaseHumanName: "Ticket Decomposition"
+phaseIndex: 4
+phaseGoal: "Break each epic into atomic tickets — header only (body in Phase 5). Each ticket fits a single PR (~half-day to 2-day units)."
+phaseCharacter: "human-judgment + structural; engine impl-verification-ratio runs."
+
+fields:
+  - field: ticket.id
+    autoPopulated: true
+    required: true
+    shape: "string (ULID, auto)"
+    description: "Unique identifier — agent does NOT set."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.epicId
+    required: true
+    shape: "string (FK)"
+    description: "Parent epic. Schema field is `epicId` — NOT `parentEpicId`."
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.ticketNumber
+    autoPopulated: true
+    required: true
+    shape: "number (auto-populated)"
+    description: "Sequential number within epic."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.title
+    required: true
+    shape: "string (>=1)"
+    description: "Short descriptive title."
+    interview_hooks:
+      - "What's the one-line label?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Implement JWT signing middleware"
+
+  - field: ticket.ticketType
+    required: true
+    shape: "enum: 'implementation' | 'verification'"
+    description: "Schema field is `ticketType` — NOT `type`."
+    interview_hooks:
+      - "Is this code/feature delivery (implementation) or test/proof (verification)?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.complexity
+    required: true
+    shape: "enum: 'small' | 'medium' | 'large' | 'xlarge'"
+    description: "Drives complexityDrivenMinCounts for Phase 5 body fields. Be honest — xlarge for a small ticket inflates Phase 5 work."
+    interview_hooks:
+      - "How complex is this — half-day, day, two-day, or week?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.estimatedMinutes
+    required: true
+    shape: "number (>0)"
+    description: "Rough estimate. Used for capacity planning."
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.order
+    required: false
+    shape: "number"
+    description: "Sort order within epic."
+    naEligible: false
+    examples: []
+
+  - field: ticket.description
+    required: true
+    shape: "string"
+    description: "One-paragraph summary of what this ticket delivers."
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: ticket.dependencies
+    required: false
+    naEligible: true
+    shape: "array of {ticketId, type: 'requires' | 'blocks'} (M4.13 structured)"
+    description: "Dependencies on other tickets. Refined in Phase 6 (cross_validation)."
+    interview_hooks:
+      - "What other ticket must finish before this one?"
+      - "What does this ticket block?"
+    na_when: "foundational ticket with no prior work; standalone setup intentionally isolated"
+    examples:
+      - "[{ticketId: 'tk_5', type: 'requires'}]"
+
+coverage_invariant: "Engine impl-verification-ratio enforces healthy mix — avoid 100% impl without verification. Count check (M4.16): 2-12 tickets per epic."
+
+handover_summary: "{ticketCount} tickets decomposed across {epicCount} epics. Implementation/verification ratio: {ratio}."
+
+feedback_likely_areas: "ticket count per epic, ticket headers (epicId / ticketType / complexity / estimatedMinutes / order), or `dependencies` declarations"
+
+post_approval_actions:
+  - "Agent starts phase 5 (ticket_expansion) — flesh out each ticket body"
+  - "Typical actions: update_ticket (description, AC, implementationSteps, files, snippets, refs, guardrails)"
+
+gate_failed_body: |
+  Your role: break each epic into atomic tickets. Aim for half-day to 2-day units.
+
+  **Approach:**
+  1. **Map each epic.acceptanceCriteria to tickets.** Validator cross-checks coverage; gaps block gate.
+  2. **Each ticket gets header only:** id (auto), epicId, title, ticketType, complexity, estimatedMinutes, order, description, dependencies.
+  3. **Healthy mix.** Don't make all tickets implementation; engine enforces impl:verification ratio.
+  4. **Complexity is honest.** xlarge here means xlarge work in Phase 5 (complexityDrivenMinCounts).
+  5. **dependencies (M4.13)** — structured shape `{ticketId, type}`. For foundational tickets, justify the gap via `fieldDeclarations.dependencies = { value: 'N/A', reason: '<≥20 chars>' }`.
+
+  Gate: zero engine findings + zero count findings (2-12 tickets per epic).
+
+rollback_target_message: |
+  You're back at **ticket_decomposition** because the ticket structural set in epic **{affectedEpicId}** just changed.
+
+  What's preserved:
+  - Ticket body content from `ticket_expansion` is **kept intact** for tickets that already had it.
+  - Other epics' ticket sets are **kept intact**.
+  - Blueprints + epic body content is **kept intact**.
+  - Cross-validation work (blueprint links, dependencies) is **kept intact** unless directly affected.
+
+  What needs validation here:
+  - Ticket count per epic within bounds (2-12 default).
+  - Each ticket header is well-formed: epicId, title, ticketType, complexity, estimatedMinutes, order, description.
+  - `dependencies` declarations structurally valid (no cycles, no broken FKs).
+  - impl/verification ratio healthy.

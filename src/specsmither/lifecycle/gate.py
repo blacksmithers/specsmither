@@ -37,16 +37,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from specsmither.domain.enums import DatapointTrigger, PlanningPhase
-from specsmither.lifecycle.ports import ValidatorFinding, ValidatorOutput
+from specsmither.lifecycle.ports import SpecFull, ValidatorFinding, ValidatorOutput
 
 __all__ = [
     "EntityScoreWrite",
     "EntityVerdict",
     "PhaseGateResult",
     "evaluate_phase_gate",
+    "evaluate_phase_gate_spec_wide",
+    "read_gate_thresholds",
 ]
 
 
@@ -352,3 +354,65 @@ def evaluate_phase_gate(
                 rationale=f"Unknown phase: {current_phase}",
                 entity_score_writes=[],
             )
+
+
+# --------------------------------------------------------------------------- #
+# Spec-wide convenience — the gate as the CPS check + the guidance composer     #
+# evaluate it: EVERY entity of the phase's type, so the `*_expansion` verdict   #
+# is the spec-wide all-pass (not a touched subset). One home so the CPS gate    #
+# and the status-report guidance always report the SAME verdict.               #
+# --------------------------------------------------------------------------- #
+
+
+def read_gate_thresholds(validator_config: Mapping[str, Any]) -> dict[str, float]:
+    """Read the ``{specification, epic, ticket}`` gate thresholds from the config.
+
+    Missing / non-numeric entries collapse to ``0.0`` (a permissive gate rather
+    than a crash) — the same shape ``evaluate_phase_gate`` expects.
+    """
+
+    raw = validator_config.get("thresholds")
+    raw = raw if isinstance(raw, Mapping) else {}
+
+    def _f(key: str) -> float:
+        try:
+            return float(raw.get(key))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
+
+    return {"specification": _f("specification"), "epic": _f("epic"), "ticket": _f("ticket")}
+
+
+def evaluate_phase_gate_spec_wide(
+    *,
+    current_phase: PlanningPhase,
+    validator_output: ValidatorOutput,
+    spec_full: SpecFull,
+    validator_config: Mapping[str, Any],
+) -> PhaseGateResult:
+    """:func:`evaluate_phase_gate` with the SPEC-WIDE all-pass scope.
+
+    The two ``*_expansion`` phases gate on **every** epic/ticket in the spec (the
+    per-entity all-pass — NOT a touched subset, and deliberately WITHOUT the global
+    cascade, which binds only at ``cross_validation``); the spec-level phases carry
+    the spec id. Both the CPS gate (``gate_currently_passing``) and the guidance
+    composer call this so they report the SAME verdict the phase actually enforces.
+    """
+
+    all_epic_ids = [epic.id for epic in spec_full.epics]
+    all_ticket_ids = [ticket.id for epic in spec_full.epics for ticket in epic.tickets]
+    if current_phase == PlanningPhase.EPIC_EXPANSION:
+        touched: list[str] = all_epic_ids
+    elif current_phase == PlanningPhase.TICKET_EXPANSION:
+        touched = all_ticket_ids
+    else:
+        touched = [spec_full.spec.id]
+
+    return evaluate_phase_gate(
+        current_phase=current_phase,
+        validator_output=validator_output,
+        touched_entity_ids=touched,
+        thresholds=read_gate_thresholds(validator_config),
+        all_epic_ids=all_epic_ids,
+        all_ticket_ids=all_ticket_ids,
+    )

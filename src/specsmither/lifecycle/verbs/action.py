@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from pydantic import ValidationError as PydanticValidationError
+
 from specsmither.adapters.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.domain.enums import (
     ActorType,
@@ -46,9 +48,14 @@ from specsmither.lifecycle.ports import SpecDependencyEdge
 from specsmither.lifecycle.prechecks import (
     Denied,
     blueprint_epic_ratio,
+    blueprint_link_refs_exist,
     cascade_rules,
+    content_shape_valid,
     count_bounds,
     cross_cut_references,
+    entity_refs_exist,
+    enum_field_guards,
+    field_shape_soft_deny,
     operation_allowed,
     schema_validate,
     spec_status_check,
@@ -118,10 +125,16 @@ def action_planning_session(
             validator_config=validator_config,
         )
 
-    if operation not in OPERATIONS:
+    # Reject unknown ops AND the synthetic/audit-only ops (which map to None in OPERATIONS —
+    # e.g. an agent mistakenly sending 'complete_planning_session' as an APS operation): both
+    # would otherwise crash classify_operation_call with a raw ValueError -> opaque INTERNAL.
+    if OPERATIONS.get(operation) is None:
         unknown = Denied(
             code="operation_not_recognised",
-            message=f"Unknown planning operation {operation!r}.",
+            message=(
+                f"{operation!r} is not a valid planning operation here. Use a mutating operation "
+                "(create_/update_/delete_*), or the complete_planning_session TOOL to finish the phase."
+            ),
         )
         return _denied(
             ports, session, operation, op_payload, unknown,
@@ -140,6 +153,18 @@ def action_planning_session(
     if isinstance(schema_result, Denied):
         return _denied(ports, session, operation, op_payload, schema_result, user_id, lifecycle_config, validator_config)
 
+    # MB.1.2 / ME.14.2 — payload-only shape + enum-poison guards (off-enum apiContract type,
+    # content-less structure, off-enum nfr/guardrail/techStack/goal/requirement values) run
+    # before the spec_full load, alongside schema_validate. Without these an off-enum value
+    # crashes the typed write boundary as an opaque INTERNAL error the agent can't recover from.
+    for payload_check in (
+        field_shape_soft_deny(operation, op_payload or {}),
+        enum_field_guards(operation, op_payload or {}),
+        content_shape_valid(operation, op_payload or {}),
+    ):
+        if isinstance(payload_check, Denied):
+            return _denied(ports, session, operation, op_payload, payload_check, user_id, lifecycle_config, validator_config)
+
     spec_full = ports.spec_store.get_spec_full(session.specification_id)
     if spec_full is None:
         raise SessionNotFoundError(session.specification_id)
@@ -151,6 +176,10 @@ def action_planning_session(
     for check in (
         count_bounds(operation, op_payload or {}, spec_full, validator_config),
         cross_cut_references(operation, op_payload or {}, spec_full),
+        # #11a / MB.2 — FK-existence guards: deny a write referencing an unknown epic /
+        # ticket / blueprint id (raw IntegrityError or phantom-success) with the valid roster.
+        entity_refs_exist(operation, op_payload or {}, spec_full),
+        blueprint_link_refs_exist(operation, op_payload or {}, spec_full),
         cascade_rules(operation, op_payload or {}, spec_full),
         blueprint_epic_ratio(operation, op_payload or {}, spec_full, validator_config),
     ):
@@ -253,7 +282,18 @@ def _accept(
 ) -> VerbResult:
     _, _, clock = resolve_now(ports)
 
-    projected = ports.operations.apply_mutation(operation, op_payload or {}, spec_full)
+    # The projection validates the mutated content against the typed records. Malformed
+    # content (a wrong-shape array item, an off-enum value the proactive guards did not
+    # cover) would otherwise raise a raw ValidationError/ValueError that surfaces as an
+    # opaque INTERNAL error — leaving the agent blind. Catch it and return a clean,
+    # field-level denial so the agent can see exactly what to fix and re-send.
+    try:
+        projected = ports.operations.apply_mutation(operation, op_payload or {}, spec_full)
+    except (PydanticValidationError, ValueError) as exc:
+        return _denied(
+            ports, session, operation, op_payload, _content_denial(exc),
+            user_id, lifecycle_config, validator_config,
+        )
 
     op_def = get_operation_def(cast(PlanningOperationName, operation))
     native = op_def.native_phase if op_def is not None else None
@@ -367,6 +407,26 @@ def _accept(
 # --------------------------------------------------------------------------- #
 # denial                                                                       #
 # --------------------------------------------------------------------------- #
+
+
+def _content_denial(exc: Exception) -> Denied:
+    """Turn a projection ValidationError/ValueError into a clean, field-level denial."""
+    if isinstance(exc, PydanticValidationError):
+        blockers = [
+            f"{'.'.join(str(part) for part in err.get('loc', ()))}: {err.get('msg')}"
+            for err in exc.errors()[:25]
+        ]
+        message = (
+            f"The submitted content is not valid ({len(blockers)} problem(s)). Correct "
+            "these fields and re-send the operation:\n- " + "\n- ".join(blockers)
+        )
+        return Denied(
+            code="invalid_content", message=message, blockers=blockers,
+            context={"field_errors": blockers},
+        )
+    # A non-pydantic ValueError (e.g. an enum coercion: "'x' is not a valid BlueprintCategory").
+    text = str(exc)
+    return Denied(code="invalid_content", message=text, blockers=[text])
 
 
 def _denied(

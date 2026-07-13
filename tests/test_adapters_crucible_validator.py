@@ -258,11 +258,16 @@ def test_ticket_expansion_populates_per_ticket_score_only() -> None:
     assert all(isinstance(v, float) for v in out.per_ticket_score.values())
     assert out.per_epic_score == {}
     assert out.validated_phase == PlanningPhase.TICKET_EXPANSION
-    # Structural count findings map to the '/structural/<field>' locator + 'count'
-    # category (each epic is below the minimum-ticket threshold).
+    # Structural findings map to the '/structural/<field>' locator. Count checks are
+    # 'count' (each epic is below the minimum-ticket threshold); #12 additionally
+    # surfaces schema `invalid_fields` (min-count / order violations that used to be
+    # silently dropped, leaving a failing gate with EMPTY blockers) as 'schema' findings.
     structural = [f for f in out.findings if (f.path or "").startswith("/structural/")]
     assert structural
-    assert all(f.category == FindingCategory.COUNT for f in structural)
+    assert any(f.category == FindingCategory.COUNT for f in structural)
+    assert all(
+        f.category in (FindingCategory.COUNT, FindingCategory.SCHEMA) for f in structural
+    )
 
 
 # --------------------------------------------------------------------------- #

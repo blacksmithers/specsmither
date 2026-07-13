@@ -172,6 +172,22 @@ def _collect_findings(result: ValidationResult) -> list[ValidatorFinding]:
     if result.structural is not None:
         for structural in result.structural.findings:
             findings.append(_structural_finding_to_finding(structural))
+        # #12 — invalid_fields feed the binary-phase `passed` verdict but were dropped
+        # here, so a gate could FAIL while rendering EMPTY blockers (an invalid-enum
+        # field was the invisible real blocker). Surface each as a schema finding.
+        for invalid in result.structural.invalid_fields:
+            findings.append(
+                ValidatorFinding(
+                    category=FindingCategory.SCHEMA,
+                    message=f"{invalid.field_path}: {invalid.reason}",
+                    severity="finding",
+                    entity_id=None,
+                    entity_type=None,
+                    path=f"/structural/{invalid.field_path}",
+                    points_lost=0.0,
+                    global_impact_on_fix=0.0,
+                )
+            )
 
     # Guidance findings (rubric / cross-validation), keyed per entity.
     if result.guidance is not None:
@@ -181,6 +197,27 @@ def _collect_findings(result: ValidationResult) -> list[ValidatorFinding]:
                     findings.append(_cross_validation_entry_to_finding(entry))
                 else:
                     findings.append(_guidance_message_to_finding(entry))
+
+    # Cross-validation LAYER findings (requirement/NFR coverage, N/A, wave/dependency,
+    # blueprint-coverage). These feed the top-level `passed` verdict but were dropped here, so a
+    # phase whose entities all clear the threshold could still FAIL with EMPTY blockers — e.g.
+    # epic_expansion with every epic at 100 but the spec's requirements not covered. The agent was
+    # then blind to WHICH requirement ids to cover (the coverage messages carry the ids). Surface
+    # them so the denial names the exact fix.
+    if result.cross_validation is not None and not result.cross_validation.skipped:
+        for cv in result.cross_validation.findings:
+            findings.append(
+                ValidatorFinding(
+                    category=FindingCategory.CROSS_VALIDATION,
+                    message=cv.message,
+                    severity="finding",
+                    entity_id=cv.primary_entity_id,
+                    entity_type=None,
+                    path=f"/cross-validation/{cv.category}",
+                    points_lost=0.0,
+                    global_impact_on_fix=0.0,
+                )
+            )
 
     return findings
 

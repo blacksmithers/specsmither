@@ -1,0 +1,247 @@
+# Phase: planning_spec — Full content per guidance-catalog-v2.md §2.1
+# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/planning-spec.ts
+
+phaseHumanName: "Spec Foundation"
+phaseIndex: 1
+phaseGoal: "Articulate the problem at the Specification level — goals, requirements, NFRs, code-level guardrails, architecture, scope, tech stack (cloud provider when applicable), folder topology, system-level acceptance criteria."
+phaseCharacter: "interview-driven; agent gathers from user and fills incrementally via APS."
+
+fields:
+  - field: spec.description
+    required: false
+    shape: "string"
+    description: "Brief one-paragraph description of what this spec is about."
+    interview_hooks:
+      - "If you had to describe this spec in one paragraph, what would you say?"
+    na_when: "never (optional but no NA mechanism)"
+    naEligible: false
+    examples:
+      - "Build a real-time collaboration engine on top of the existing auth system."
+
+  - field: spec.background
+    required: false
+    naEligible: true
+    shape: "string"
+    description: "Context around why this spec exists — prior systems, lessons learned, motivation."
+    interview_hooks:
+      - "What came before this? What didn't work?"
+      - "Why are we building this now vs later?"
+    na_when: "internal tooling specs / greenfield projects with no prior context"
+    examples:
+      - "Replaces the legacy MQTT bridge that doesn't scale past 10k concurrent connections."
+
+  - field: spec.goals
+    required: true
+    minCount: 3
+    tier: critical
+    shape: "array of {title, description, type, successCriteria[], kpi?}"
+    description: "High-level objectives. Each goal has structured shape with measurable success criteria. `id` is auto-assigned internally — never pass it."
+    interview_hooks:
+      - "What's the user-perceived outcome?"
+      - "How will we measure success — what number changes?"
+      - "Is this business, technical, user-facing, or operational?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "{ title: 'Reduce p99 latency to <100ms', description: 'Critical for live collaboration UX', type: 'technical', successCriteria: ['p99 < 100ms over 30-day window', 'no SLA breaches in Q4'], kpi: 'p99_latency_ms' }"
+
+  - field: spec.requirements
+    required: true
+    minCount: 3
+    tier: critical
+    shape: "array of {title, description, type, source?, acceptanceCriteria[≥1 of {given, when, then, order?}], dependsOn?, constraints?} — type ∈ functional | business-rule | integration"
+    description: "Functional + non-functional requirements. Each maps to one or more epics in Phase 2. `id` is auto-assigned internally (on the requirement and on each nested acceptanceCriteria item) — never pass it."
+    interview_hooks:
+      - "What must the system do?"
+      - "What must it NOT do?"
+      - "Where did this requirement come from — user, regulator, ops?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "{ title: 'Multi-tenant isolation', description: 'Tenant data must never cross boundaries', type: 'functional', source: 'compliance', acceptanceCriteria: [{ given: 'two tenants with data', when: 'one tenant queries documents', then: 'no other tenant data is ever returned' }] }"
+
+  - field: spec.architecture
+    required: true
+    tier: critical
+    shape: "string (markdown allowed)"
+    description: "Top-level architecture decision — patterns, layers, key tradeoffs."
+    interview_hooks:
+      - "How is this split — monolith / microservices / hybrid?"
+      - "What are the key boundaries?"
+      - "What architectural patterns drive this — event-sourced, CQRS, etc?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Event-sourced backend with CQRS read models. WebSocket gateway for client push. Postgres for command store, Redis for read projections."
+
+  # ME.0-3 T-V.10 — spec.scope composite retired in the rubric; decomposed
+  # into 4 sub-entries (inScope + outOfScope critical, assumptions +
+  # externalDependencies enrichment). Each gets its own finding so guidance
+  # can target the missing slot, not the umbrella field.
+  - field: spec.scope.inScope
+    required: true
+    minCount: 3
+    tier: critical
+    shape: "array of strings"
+    description: "What this spec covers. Constrains requirements and prevents ticket drift downstream. ScopeSchema enforces >= 3 entries."
+    interview_hooks:
+      - "What's IN this spec?"
+      - "Which user-visible behaviors does v1 own?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "['real-time text editing', 'cursor sync', 'presence indicators']"
+
+  - field: spec.scope.outOfScope
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of strings"
+    description: "Explicit non-goals. Prevents scope creep during epic and ticket expansion."
+    interview_hooks:
+      - "What's deliberately OUT for v1?"
+      - "What's deferred to a future spec?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "['voice chat', 'video chat', 'mobile native apps']"
+
+  - field: spec.scope.assumptions
+    required: false
+    naEligible: true
+    shape: "array of strings"
+    description: "Implicit beliefs the architecture rests on (about traffic, data shape, team size, infra)."
+    interview_hooks:
+      - "What are we assuming about traffic / data / team that, if wrong, would break the plan?"
+    na_when: "spec has no architectural assumptions worth recording — provide >=20-char rationale"
+    examples:
+      - "['peak traffic stays under 10k RPS', 'all clients on modern browsers (>=2 years)']"
+
+  - field: spec.scope.externalDependencies
+    required: false
+    naEligible: true
+    shape: "array of strings"
+    description: "Third-party APIs, infra, vendor services the spec relies on. Shape failure modes the implementation must defend against."
+    interview_hooks:
+      - "Which external systems must be live for this to work?"
+    na_when: "spec is fully self-contained — provide >=20-char rationale"
+    examples:
+      - "['Stripe billing API', 'AWS Cognito user pools']"
+
+  - field: spec.techStack
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of {name, layer, version?, rationale?, alternativesConsidered?} — layer ∈ database | backend | frontend | infrastructure | devops | observability | auth | integration | testing"
+    description: "Tech stack items, each tagged with its layer. If the system runs on a cloud, name the provider explicitly as an `infrastructure` item (AWS / GCP / Azure); if it is on-prem / self-hosted, say so instead."
+    interview_hooks:
+      - "Which cloud, if any? (AWS / GCP / Azure / on-prem)"
+      - "What runtime — Node, Bun, Deno, Python, Go?"
+      - "What database engine?"
+      - "What's already in use vs new to introduce?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "[ {name: 'AWS', layer: 'infrastructure', rationale: 'existing infra'}, {name: 'Bun', layer: 'backend', version: '1.x'}, {name: 'DynamoDB', layer: 'database'} ]"
+
+  - field: spec.folderStructures
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of {scope, description?, content} — scope = the package/service path, content = what lives inside"
+    description: "Macro folder topology only — high-level packages/services. Per-epic file structures live in Phase 3 (epic.fileStructures). M4.17. `id` is auto-assigned internally — never pass it."
+    na_when: "never (required field; M4.17)"
+    naEligible: false
+    examples:
+      - "[ {scope: 'packages/api', description: 'HTTP gateway + auth', content: 'Express app, Cognito authorizer, REST route handlers'}, {scope: 'packages/realtime', description: 'WebSocket fanout', content: 'WS server, room manager, presence tracker'} ]"
+
+  - field: spec.acceptanceCriteria
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of {given, when, then, order?}"
+    description: "Top-level BDD acceptance criteria — system-wide outcomes. `id` is auto-assigned internally — never pass it. `order` is optional: auto-populated by position if omitted, or set it to control ordering."
+    interview_hooks:
+      - "How do we know the system as a whole works?"
+      - "What's the smoke test scenario?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "{ given: 'two users in same room', when: 'one types', then: 'other sees typing within 100ms' }"
+
+  - field: spec.nonFunctionalRequirements
+    required: true
+    minCount: 1
+    shape: "array of {title, description, category, target?}"
+    description: "NFRs — performance, scalability, security, availability, etc. Distinct from spec.requirements (which are functional). `id` is auto-assigned internally — never pass it."
+    interview_hooks:
+      - "What numbers do we need to hit — RPS, latency, uptime?"
+      - "What security guarantees?"
+      - "What scale do we need to handle?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "{ description: 'Single shard must hold 10k concurrent WS connections', category: 'scalability', metric: 'concurrent WS connections per shard', target: '10000' }"
+
+  - field: spec.guardrails
+    required: true
+    # ME.0-3 T-V.8 — minCount bumped from 1 to 2; one guardrail rarely
+    # produces a useful set of constraints.
+    minCount: 2
+    shape: "array of {description, category, rationale, consequence, scope?} — category ∈ technical | business | regulatory | ethical | operational; scope (OPTIONAL — omit unless needed) ∈ spec | epic | ticket (the guardrail's APPLICABILITY LEVEL, never a path/module)"
+    description: "Code-level guardrails — what NOT to do. Categories: technical / business / regulatory / ethical / operational. `id` is auto-assigned internally — never pass it."
+    interview_hooks:
+      - "What patterns are we explicitly avoiding?"
+      - "Are there legal/regulatory constraints?"
+      - "What's been a problem before that we want to prevent?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "{ description: 'WS handler must enqueue, not block on DB', category: 'technical', rationale: 'synchronous DB calls stall the event loop under fanout', consequence: 'latency spikes and dropped connections under load' }"
+
+  # ME.0-3 T-V.1 — spec-level shared patterns are the BASE inheritance set
+  # each Epic extends/overrides via its own sharedPatterns. Replaces the
+  # cut top-level Spec.codeStandards / commonImports / returnTypes /
+  # additionalImports / commonFiles by promoting them into 5 SharedPattern
+  # inheritance slots.
+  - field: spec.sharedPatterns
+    required: false
+    minCount: 1
+    tier: recommended
+    naEligible: true
+    shape: "array of {name, description, codeStandards?, commonImports?, returnTypes?, additionalImports?, commonFiles?}"
+    description: "Spec-level shared patterns — BASE inheritance set merged into every Epic's sharedPatterns by name. Each pattern carries 5 optional inheritance slots: codeStandards (errorHandling/naming/language + free keys), commonImports (string[]), returnTypes (Record<string,string>), additionalImports (string[]), commonFiles (Record<string,string>). Use these to communicate cross-spec conventions instead of cut top-level fields. `id` is auto-assigned internally — never pass it."
+    interview_hooks:
+      - "Which code-level conventions apply to every epic — error handling, import style, return-type idioms?"
+      - "Are there shared helper imports or stock file scaffolds every epic should reach for?"
+    na_when: "spec has no cross-cutting conventions worth documenting — provide >=20-char rationale"
+    examples:
+      - "{ name: 'Repository pattern', description: 'All data access via repository classes', codeStandards: { errorHandling: 'never throw, return Result<T,E>' }, commonImports: ['Result', 'AppError'] }"
+
+  - field: spec.epicTargets
+    required: false
+    shape: "{total?: number, breakdown?: {category: count}}"
+    description: "Optional hint for Phase 2 — expected epic count and distribution. M4.4-bonus."
+    na_when: "no preference; let the agent decide in Phase 2"
+    naEligible: false
+    examples:
+      - "{ total: 5, breakdown: { foundation: 1, feature: 3, integration: 1 } }"
+
+handover_summary: "Spec '{specTitle}' met planning_spec gate (score {score}/{threshold}). Outstanding optional findings: {findingsLeftover}."
+
+feedback_likely_areas: "goals, requirements, NFRs, guardrails, architecture, scope, techStack, folderStructures, or top-level acceptanceCriteria"
+
+post_approval_actions:
+  - "Agent starts phase 2 (epic_decomposition) — first action via APS: create_epic"
+  - "Aim for {epicTargets.total} initial epics covering main scope blocks (or 2-15 if epicTargets not set)"
+  - "Plus blueprints (architectural artifacts) created in same phase"
+
+gate_failed_body: |
+  Your role: gather the spec foundation through user interview, then fill it incrementally via `action_planning_session` (operation `update_spec`).
+
+  **Approach:**
+  1. **Interview the user first.** Ask focused questions per field — don't fill blindly.
+  2. **Fill incrementally.** Each `update_spec` re-runs the validator; address findings as they surface, don't accumulate debt.
+  3. **Mark optional fields N/A** via `update_spec` with `fieldDeclarations: { "<field>": { "value": "N/A", "reason": "<≥20 chars>" } }` — never invent content.
+
+  Gate threshold: score ≥ {threshold}/100. Score rises as fields gain quality content.

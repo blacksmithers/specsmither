@@ -19,7 +19,7 @@ collected validation errors in ``context``.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
@@ -64,6 +64,10 @@ class _CreateTicketPayload(_Payload):
     epicId: _NonEmptyStr
     title: _NonEmptyStr
     description: str | None = None
+    # ticketType is CREATE-only (00c468fe): honoured here (default implementation) but
+    # NOT writable on update_ticket, so a type-flip can't rebalance the impl:verification
+    # ratio past an already-passed ticket_decomposition gate.
+    ticketType: Literal["implementation", "verification"] | None = None
 
 
 class _UpdateTicketPayload(_Payload):
@@ -156,9 +160,14 @@ def schema_validate(op: PlanningOperationName, payload: Any) -> PrecheckResult:
             {"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]}
             for e in exc.errors()
         ]
+        blockers = [f"{'.'.join(str(part) for part in e['loc'])}: {e['msg']}" for e in errors]
         return Denied(
             code="invalid_payload",
-            message=f"Payload for operation '{op}' is malformed.",
+            message=(
+                f"Payload for operation '{op}' is malformed ({len(blockers)} problem(s)). "
+                "Correct these and re-send:\n- " + "\n- ".join(blockers)
+            ),
             context={"errors": errors},
+            blockers=blockers,
         )
     return Accepted()

@@ -64,6 +64,29 @@ def operation_allowed(
         )
 
     rollback = classification == "late" and not _is_field_declarations_only_update(op, payload)
+    if (
+        rollback
+        and op.startswith("create_")
+        and current_phase in (PlanningPhase.EPIC_EXPANSION, PlanningPhase.TICKET_EXPANSION)
+    ):
+        # structural_create_in_expansion (2bf6d24f) — a structural create in a SCORED
+        # expansion phase must NOT silently roll the session back to its native phase
+        # (which orphans the freshly-created entity and skews the gate baseline mid-drive).
+        # Soft-deny and name the recovery update_ op instead.
+        recovery = op.replace("create_", "update_", 1)
+        return Denied(
+            code="structural_create_in_expansion",
+            message=(
+                f"Cannot '{op}' during the scored '{current_phase.value}' phase — it would "
+                f"orphan the new entity and skew the gate. Refine existing entities with "
+                f"'{recovery}', or complete this phase first."
+            ),
+            context={
+                "operation": op,
+                "current_phase": current_phase.value,
+                "recovery_operation": recovery,
+            },
+        )
     return Accepted(rollback=rollback)
 
 

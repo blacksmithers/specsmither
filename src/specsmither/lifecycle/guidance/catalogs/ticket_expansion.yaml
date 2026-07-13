@@ -1,0 +1,221 @@
+# Phase: ticket_expansion — Full content per guidance-catalog-v2.md §2.5
+# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/ticket-expansion.ts
+
+phaseHumanName: "Ticket Expansion"
+phaseIndex: 5
+phaseGoal: "Fill ticket bodies — description, BDD AC, ordered implementation steps, file ops, test specification, guardrails, code/type references and snippets, blueprint references."
+phaseCharacter: "densest phase. validator scores per-ticket; gate is per touched ticket. complexityDrivenMinCounts (M4.14) enforces minimum body content per complexity tier."
+
+fields:
+  - field: ticket.description
+    required: true
+    # ME.0-3 T-V.7 — stringMinLengths.ticket.description bumped 30 → 50;
+    # below 50 chars the agent cannot understand what the ticket is about.
+    shape: "string (>=50 chars)"
+    description: "Full ticket description — context, intent, edge cases. Expanded from Phase 4 header. Validator enforces >=50 characters."
+    naEligible: false
+    examples:
+      - "Implement JWT signing middleware that issues short-lived access tokens and rotates refresh tokens on use. Handles clock skew up to 60s and emits a metric per token issued."
+
+  - field: ticket.acceptanceCriteria
+    required: true
+    minCount: 1
+    tier: critical
+    shape: "array of {given, when, then, order?}"
+    # ME.0-3 T-V.8 — complexityDrivenMinCounts bumped from 1/2/3/5 to
+    # 2/3/5/7 across all complexity tiers; the previous table accepted
+    # shallow AC sets that didn't fully cover the ticket's behavior.
+    description: "BDD AC. `id` is auto-assigned internally — never pass it. `order` is optional: auto-populated by position if omitted, or set it to control ordering. Min count varies by complexity (M4.14, T-V.8): small=2, medium=3, large=5, xlarge=7."
+    interview_hooks:
+      - "What's the smoke test for this ticket?"
+      - "What edge cases?"
+    naEligible: false
+    examples: []
+
+  - field: ticket.implementationSteps
+    required: true
+    minCount: 2
+    tier: critical
+    # ME.0-3 T-S.6 — step body field renamed `description` → `text`.
+    shape: "array of {text, order?, completed?}"
+    description: "Ordered steps for work lifecycle execution. Step body is `text` (renamed from `description` in T-S.6). `id` is auto-assigned internally — never pass it. `order` is optional: auto-populated by position if omitted. `completed` flipped during work, not planning. Min count by complexity: 2/4/6/10 for s/m/l/xl."
+    naEligible: false
+    examples: []
+
+  - field: ticket.filesToBeCreated
+    required: false
+    # ME.0-3 T-V.6 — promoted from recommended → critical. Without explicit
+    # file declarations, blueprint coverage + wave analysis run on
+    # half-blind data.
+    tier: critical
+    shape: "array of strings (paths)"
+    description: "New files this ticket creates. Critical — wave analysis and blueprint coverage depend on accurate file declarations."
+    naEligible: false
+    examples:
+      - "['packages/auth/src/jwt-signer.ts', 'packages/auth/src/__tests__/jwt-signer.test.ts']"
+
+  - field: ticket.filesToBeModified
+    required: false
+    # ME.0-3 T-V.6 — promoted from recommended → critical alongside
+    # filesToBeCreated; modification declarations signal coordination
+    # points with other tickets in the same wave.
+    tier: critical
+    shape: "array of strings (paths)"
+    description: "Existing files this ticket modifies. Critical — signals coordination points with other tickets editing the same files."
+    naEligible: false
+    examples:
+      - "['packages/auth/src/index.ts']"
+
+  - field: ticket.filesToBeDeleted
+    required: false
+    # ME.0-3 T-V.2 — promoted to its own rubric entry (recommended, NA-
+    # eligible). Deletion declarations participate in wave analysis to
+    # detect deletion-after-modification + deletion-after-creation conflicts.
+    tier: recommended
+    naEligible: true
+    shape: "array of strings (paths)"
+    description: "Files this ticket deletes. Participates in wave analysis to detect deletion-after-modification and deletion-after-creation conflicts."
+    na_when: "ticket deletes nothing — provide >=20-char rationale"
+    examples:
+      - "['packages/auth/src/legacy-session-store.ts']"
+
+  - field: ticket.filesToBeReferenced
+    required: false
+    tier: recommended
+    naEligible: true
+    shape: "array of strings (paths)"
+    description: "Read-only dependencies — files this ticket reads or imports but doesn't change. Referenced files owned by another ticket require a `dependencies` declaration to enforce ordering."
+    na_when: "ticket references no files from other tickets — provide >=20-char rationale"
+    examples:
+      - "['packages/types/src/auth/User.ts']"
+
+  # ME.0-3 T-V.12 — ticket.testSpecification composite retired in the
+  # rubric; decomposed into 4 sub-entries that each carry
+  # `conditionalApplicability: { field: 'ticketType', equals: 'verification' }`
+  # so they only score on verification tickets. coverageTarget uses the
+  # new T-V.13 `range` quality check (0–100 inclusive).
+  - field: ticket.testSpecification.testTypes
+    required: false
+    minCount: 1
+    tier: critical
+    naEligible: false
+    shape: "array of enum: 'unit' | 'integration' | 'e2e' | 'typecheck' | 'lint' | 'build' | 'contract' | 'structural' | 'layout' | 'a11y' | 'performance'"
+    description: "Test types this verification ticket covers. Conditionally applicable: scored only when ticketType === 'verification'."
+    interview_hooks:
+      - "Which test layer(s) does this verification exercise?"
+    na_when: "ticketType !== 'verification' — entry is skipped automatically"
+    examples:
+      - "['unit', 'integration']"
+
+  - field: ticket.testSpecification.qualityGates
+    required: false
+    minCount: 1
+    tier: critical
+    naEligible: false
+    shape: "array of strings"
+    description: "Conditions that must hold for the verification to be considered complete (e.g. 'no flaky retries', 'mutation score >= 60%'). Conditionally applicable: verification tickets only."
+    interview_hooks:
+      - "What signals would make us reject this verification as insufficient?"
+    na_when: "ticketType !== 'verification' — entry is skipped automatically"
+    examples:
+      - "['all paths exercised', 'no console output during run']"
+
+  - field: ticket.testSpecification.testCommands
+    required: false
+    minCount: 1
+    tier: recommended
+    naEligible: true
+    shape: "array of strings (shell invocations)"
+    description: "Concrete commands that execute this verification (e.g. 'pnpm --filter @specforge/auth test'). Closes the gap between intent and CI. Conditionally applicable: verification tickets only."
+    na_when: "verification has no command surface (manual review only) — provide >=20-char rationale"
+    examples:
+      - "['pnpm --filter @specforge/auth test --run jwt-signer']"
+
+  - field: ticket.testSpecification.coverageTarget
+    required: false
+    tier: standard
+    naEligible: true
+    shape: "number in [0, 100]"
+    description: "Soft planning signal for line/branch coverage target. Validator enforces range [0, 100] via the T-V.13 `range` quality check. Conditionally applicable: verification tickets only."
+    interview_hooks:
+      - "What's a realistic coverage floor for this verification?"
+    na_when: "coverage isn't meaningful for this verification — provide >=20-char rationale"
+    examples:
+      - "85"
+
+  - field: ticket.guardrails
+    required: false
+    shape: "array of guardrailIds (FK to spec.guardrails)"
+    description: "Spec guardrails that apply to this ticket. Per-ticket subset of spec.guardrails."
+    naEligible: false
+    examples: []
+
+  - field: ticket.codeReferences
+    required: false
+    shape: "array of {path, lineStart?, lineEnd?, purpose}"
+    description: "References to EXISTING files in the codebase the agent should read for context."
+    naEligible: false
+    examples: []
+
+  - field: ticket.typeReferences
+    required: false
+    shape: "array of {path, typeName, purpose}"
+    description: "References to EXISTING type definitions to use."
+    naEligible: false
+    examples: []
+
+  - field: ticket.codeSnippets
+    required: false
+    minCount: 1
+    shape: "array of {language, code, purpose}"
+    description: "INLINE code patterns — distinct from codeReferences (which point to existing files). M4.14. Min count by complexity: 1/2/3/4 for s/m/l/xl."
+    naEligible: false
+    examples: []
+
+  - field: ticket.typeSnippets
+    required: false
+    minCount: 1
+    shape: "array of {language, code, purpose}"
+    description: "INLINE type definitions to introduce. M4.14. Min count by complexity: 1/1/2/2 for s/m/l/xl."
+    naEligible: false
+    examples: []
+
+  - field: ticket.blueprintReferences
+    required: false
+    shape: "array of {blueprintId, context?, section?}"
+    description: "Initial blueprint links — refined in Phase 6 (cross_validation)."
+    naEligible: false
+    examples: []
+
+coverage_invariant: |
+  complexityDrivenMinCounts (M4.14 + ME.0-3 T-V.8 AC bump):
+    small:  AC=2, IS=2,  codeSnippets=1, typeSnippets=1
+    medium: AC=3, IS=4,  codeSnippets=2, typeSnippets=1
+    large:  AC=5, IS=6,  codeSnippets=3, typeSnippets=2
+    xlarge: AC=7, IS=10, codeSnippets=4, typeSnippets=2
+
+  AC/IS `order` uniqueness enforced (no duplicate order values within a ticket).
+  testSpecification sub-entries (ME.0-3 T-V.12) score only when ticketType === 'verification'.
+
+handover_summary: "Tickets expanded with descriptions, BDD AC, ordered IS, file ops, test specs, snippets, references (score {score}/{threshold})."
+
+feedback_likely_areas: "ticket.description, ticket.acceptanceCriteria, ticket.implementationSteps, ticket.filesToBeCreated/Modified/Deleted/Referenced, ticket.testSpecification, ticket.guardrails, ticket.codeReferences/typeReferences, ticket.codeSnippets/typeSnippets"
+
+post_approval_actions:
+  - "Agent starts phase 6 (cross_validation) — relational enrichment"
+  - "Typical actions: link_blueprint_to_tickets, create_dependencies, unlink_blueprint_to_tickets, delete_dependencies"
+
+gate_failed_body: |
+  Your role: fill ticket bodies completely. **The densest phase.** Each ticket gets verifiable BDD AC, ordered implementation steps, file operations (4 separate fields!), test spec, guardrails subset, code/type refs and snippets, blueprint links.
+
+  **Approach:**
+  1. **Description first.** Set context, intent, edge cases.
+  2. **AC in BDD format** ({given, when, then, order?}). `order` is optional — auto by position if omitted. `id` is internal — never pass it.
+  3. **Implementation steps in order.** Each step is later marked complete during work lifecycle.
+  4. **File ops use 4 fields:** filesToBeCreated + filesToBeModified are **critical** (T-V.6); filesToBeDeleted + filesToBeReferenced are recommended NA-eligible. Cross-checks validate.
+  5. **Test specification decomposed into 4 sub-fields** (T-V.12): testTypes + qualityGates (critical), testCommands (recommended NA), coverageTarget (standard NA, range 0–100). Each scores only when ticketType === 'verification'.
+  6. **Code/type refs (existing) != snippets (inline).** Refs point to files; snippets are inline patterns.
+  7. **Min counts complexity-driven** (M4.14 + T-V.8 AC bump): small=AC2/IS2/cs1/ts1, medium=AC3/IS4/cs2/ts1, large=AC5/IS6/cs3/ts2, xlarge=AC7/IS10/cs4/ts2.
+  8. **Blueprint links** are initial here — refined in Phase 6.
+
+  Gate: per-ticket score ≥ {threshold}/100 + complexityDrivenMinCounts respected + AC/IS order uniqueness.

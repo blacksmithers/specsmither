@@ -1,0 +1,177 @@
+# Phase: epic_decomposition — Full content per guidance-catalog-v2.md §2.2
+# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/epic-decomposition.ts
+
+phaseHumanName: "Epic Decomposition"
+phaseIndex: 2
+phaseGoal: "Decide how many epics the spec will have. Create epic shells (header only — body in Phase 3). Create reusable architectural blueprints."
+phaseCharacter: "human-judgment for 'is decomposition sufficient'; validator runs blueprint-epic-ratio engine + count check (2-15 epics)."
+
+fields:
+  # --- Epic shell fields ---
+  - field: epic.id
+    autoPopulated: true
+    required: true
+    shape: "string (ULID, auto-populated by operations layer)"
+    description: "Unique identifier — agent does NOT set."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  - field: epic.specificationId
+    autoPopulated: true
+    required: true
+    shape: "string (FK, auto-populated)"
+    description: "Parent spec reference — agent does NOT set."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  - field: epic.title
+    required: true
+    shape: "string (>=1 char)"
+    description: "Short descriptive name — 3-7 words."
+    interview_hooks:
+      - "What's the one-line label for this epic?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Authentication & Authorization"
+      - "Real-time Collaboration Engine"
+
+  - field: epic.description
+    required: true
+    shape: "string"
+    description: "One-paragraph summary of what this epic covers."
+    interview_hooks:
+      - "What does this epic deliver, in one paragraph?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Provides JWT-based auth with refresh tokens, role-based authorization, and session revocation."
+
+  - field: epic.objective
+    required: true
+    # ME.0-3 T-V.7 — stringMinLengths.epic.objective bumped 50 → 100; below
+    # 100 chars an objective rarely constrains downstream ticket scope.
+    shape: "string (>=100 chars)"
+    description: "The 'why' — concrete outcome this epic enables when all its tickets are complete. Distinct from description (which is 'what'). Validator enforces >=100 characters."
+    interview_hooks:
+      - "Why this epic? What does it unlock?"
+      - "What user-visible / system-visible change does completing this epic produce?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Enable secure multi-tenant access by isolating session state per tenant, so credentials issued for tenant A can never authorize a request scoped to tenant B."
+
+  - field: epic.order
+    required: false
+    shape: "number"
+    description: "Sort order among epics in the spec."
+    na_when: "no preferred ordering"
+    naEligible: false
+    examples:
+      - "1, 2, 3..."
+
+  - field: epic.tickets
+    autoPopulated: true
+    required: true
+    shape: "array (empty in this phase — populated Phase 4)"
+    description: "Container for tickets; empty here."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  # --- Blueprint fields ---
+  - field: blueprint.id
+    autoPopulated: true
+    required: true
+    shape: "string (ULID, auto-populated)"
+    description: "Unique identifier — agent does NOT set."
+    na_when: "never (auto)"
+    naEligible: false
+    examples: []
+
+  - field: blueprint.title
+    required: true
+    shape: "string (>=1 char)"
+    description: "Short title for the blueprint."
+    interview_hooks:
+      - "What does this blueprint describe?"
+    na_when: "never (required field)"
+    naEligible: false
+    examples:
+      - "Auth Flow Sequence Diagram"
+
+  - field: blueprint.category
+    required: true
+    shape: "enum: 'flowchart' | 'architecture' | 'state' | 'sequence' | 'erd' | 'mockup' | 'adr' | 'component' | 'deployment' | 'api' | 'algorithm' | 'protocol' | 'glossary' | 'design_system'"
+    description: "Type of artifact."
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: blueprint.content
+    required: true
+    shape: "string"
+    description: "The artifact body — text, mermaid, ascii, mockup, etc."
+    na_when: "never (required field)"
+    naEligible: false
+    examples: []
+
+  - field: blueprint.description
+    required: false
+    shape: "string"
+    description: "Optional one-line description of what the blueprint covers."
+    naEligible: false
+    examples: []
+
+  - field: blueprint.format
+    required: false
+    shape: "enum: 'markdown' | 'mermaid' | 'ascii' | 'mixed' | 'html' | 'svg' | 'image'"
+    description: "Format of the content."
+    naEligible: false
+    examples: []
+
+  - field: blueprint.coverageType
+    required: false
+    shape: "enum: 'ticket' | 'all' (default: 'ticket')"
+    description: "Whether this blueprint covers individual tickets or applies across the whole spec."
+    naEligible: false
+    examples: []
+
+coverage_invariant: "blueprint:epic ratio engine enforces >=1 blueprint reference per epic (configurable). Validator emits finding if ratio violated."
+
+handover_summary: "{epicCount} epics decomposed + {blueprintCount} blueprints defined. Review distribution and architectural artifacts."
+
+feedback_likely_areas: "epic count, epic shells (title / description / objective), blueprint set, or blueprint:epic ratio"
+
+post_approval_actions:
+  - "Agent starts phase 3 (epic_expansion) — enrich each epic with body fields"
+  - "Typical actions: update_epic (architecture, scope, AC, coverage, validationCommands, apiContracts, sharedPatterns)"
+
+gate_failed_body: |
+  Your role: break the spec into 2-15 cohesive epics + create reusable blueprints. **This phase is shells + artifacts only** — body fields come in Phase 3.
+
+  **Approach:**
+  1. **Identify natural boundaries.** Group requirements that share data, workflow, or user persona.
+  2. **Each epic gets shell only:** id, specificationId, title, description, objective, order.
+  3. **Create blueprints in parallel.** Architectural artifacts that span multiple epics (ERD, sequence diagrams, ADRs).
+  4. **Aim for 2-15 epics** (configurable count check).
+  5. **Don't expand yet.** Coverage (requirementsCovered, etc.) goes in Phase 3.
+
+  Gate: zero engine findings + zero count findings. Engine `blueprint-epic-ratio` validates blueprint coverage per epic.
+
+rollback_target_message: |
+  You're back at **epic_decomposition** because the structural set of {entityType}s just changed.
+
+  What's preserved:
+  - All epic body content from later phases is **kept intact** for epics that weren't deleted.
+  - Tickets attached to surviving epics are **kept intact**.
+  - Blueprints + linked relationships are **kept intact** (unless the trigger op was a blueprint mutation).
+
+  What needs validation here:
+  - Epic count is within bounds (2-15 default; check config).
+  - `blueprint:epic` ratio is satisfied.
+  - Each epic shell (title / description / objective / order) is well-formed.
+
+  When you re-advance, the validator picks up where it left off — body content already in place won't need re-filling unless the structural change invalidated it.

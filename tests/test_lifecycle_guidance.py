@@ -244,3 +244,68 @@ def test_gps_active_plain_status_report() -> None:
 
 def test_pick_variant_is_pure_function_of_session() -> None:
     assert pick_get_planning_status_variant(_session()) == GuidanceVariant.PHASE_STATUS_REPORT
+
+
+# --------------------------------------------------------------------------- #
+# Status report reflects the PHASE-GATE verdict, not the composite gate_result #
+# (simulator judge find 2026-07-13: "gate fail, score 100 / threshold 70").    #
+# --------------------------------------------------------------------------- #
+
+
+def _spec_full_with_tickets(*ticket_ids: str) -> Any:
+    from specsmither.lifecycle.ports import EpicFull, SpecFull, TicketRef
+
+    tickets = [TicketRef(id=tid, epic_id="e1", title=tid) for tid in ticket_ids]
+    epic = EpicFull(id="e1", specification_id="spec-1", title="E1", tickets=tickets, description="d")
+    return SpecFull(
+        spec=type("S", (), {"id": "spec-1", "status": "planning"})(),
+        epics=[epic],
+        blueprints=[],
+    )
+
+
+def test_status_report_shows_phase_gate_pass_despite_cascade_fail() -> None:
+    # At ticket_expansion, every ticket clears the threshold (100 ≥ 70) so the PHASE gate
+    # passes — but the validator's composite gate_result is 'fail' (the global cascade:
+    # the DAG is not wired yet). The status report must show the phase-gate verdict, not
+    # the composite, so it never says the self-contradictory "gate fail, score 100".
+    output = ValidatorOutput(
+        gate_result="fail",  # composite folds in the failing cascade
+        local_score=100.0,
+        per_epic_score={},
+        per_ticket_score={"t1": 100.0, "t2": 100.0},  # every ticket ≥ ticket threshold (70)
+        findings=[],
+        validated_phase=PlanningPhase.TICKET_EXPANSION,
+    )
+    resp = compose_response(
+        variant=GuidanceVariant.PHASE_STATUS_REPORT,
+        session=_session(current_phase=PlanningPhase.TICKET_EXPANSION.value),
+        spec_full=_spec_full_with_tickets("t1", "t2"),
+        validator_output=output,
+        validator_config=VALIDATOR_CONFIG,
+    )
+    assert resp.gate_result == "pass"
+    assert "gate pass" in resp.guidance
+    assert "gate fail" not in resp.guidance
+
+
+def test_status_report_shows_phase_gate_fail_when_a_ticket_is_short() -> None:
+    # Symmetric: one ticket below threshold → the phase gate fails (spec-wide all-pass),
+    # even if the composite gate_result happened to be 'pass'.
+    output = ValidatorOutput(
+        gate_result="pass",
+        local_score=75.0,
+        per_epic_score={},
+        per_ticket_score={"t1": 100.0, "t2": 50.0},
+        findings=[],
+        validated_phase=PlanningPhase.TICKET_EXPANSION,
+    )
+    resp = compose_response(
+        variant=GuidanceVariant.PHASE_STATUS_REPORT,
+        session=_session(current_phase=PlanningPhase.TICKET_EXPANSION.value),
+        spec_full=_spec_full_with_tickets("t1", "t2"),
+        validator_output=output,
+        validator_config=VALIDATOR_CONFIG,
+    )
+    assert resp.gate_result == "fail"
+    assert "gate fail" in resp.guidance
