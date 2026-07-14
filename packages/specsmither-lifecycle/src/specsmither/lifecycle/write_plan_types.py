@@ -19,6 +19,7 @@ Shape:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -40,12 +41,25 @@ __all__ = [
     "SpecMutation",
     "WritePlan",
     "WritePlanItem",
+    "to_snake",
 ]
 
 #: The four entity discriminators a ``specMutation`` / ``entityDelete`` may target.
 EntityType = Literal["spec", "epic", "ticket", "blueprint"]
 #: The three entity discriminators a per-entity score write may target (no blueprint).
 ScoreEntityType = Literal["spec", "epic", "ticket"]
+
+# --------------------------------------------------------------------------- #
+# Wire-key normaliser (pure) — camelCase producer key -> snake_case attribute   #
+# --------------------------------------------------------------------------- #
+_CAMEL_BOUNDARY_1 = re.compile(r"(.)([A-Z][a-z]+)")
+_CAMEL_BOUNDARY_2 = re.compile(r"([a-z0-9])([A-Z])")
+
+
+def to_snake(name: str) -> str:
+    """Normalise a (possibly camelCase) producer key to snake_case (idempotent)."""
+    stage = _CAMEL_BOUNDARY_1.sub(r"\1_\2", name)
+    return _CAMEL_BOUNDARY_2.sub(r"\1_\2", stage).lower()
 
 
 # --------------------------------------------------------------------------- #

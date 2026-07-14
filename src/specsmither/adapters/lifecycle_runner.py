@@ -19,9 +19,11 @@ typed payload.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, TypeVar
 
 from specsmither.adapters.lifecycle_ports import make_lifecycle_ports
+from specsmither.lifecycle.dispatch import create_lifecycle
 from specsmither.lifecycle.verbs.types import HandoverOutcome, HandoverResult
 
 if TYPE_CHECKING:
@@ -29,11 +31,40 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session, sessionmaker
 
-    from specsmither.lifecycle.ports import Clock, IdGenerator, LifecyclePorts
+    from specsmither.lifecycle.dispatch import LifecycleEvent
+    from specsmither.lifecycle.guidance.types import PlanningAgentResponse
+    from specsmither.lifecycle.ports import Clock, IdGenerator, LifecyclePorts, Validator
 
-__all__ = ["run_handover"]
+__all__ = ["run_handover", "run_verb"]
 
 _P = TypeVar("_P")
+
+
+def run_verb(
+    session_factory: sessionmaker[Session],
+    event: LifecycleEvent,
+    *,
+    clock: Clock | None = None,
+    id_generator: IdGenerator | None = None,
+    validator: Validator | None = None,
+) -> PlanningAgentResponse:
+    """Open one transaction, bind the ports, and run ``event`` end-to-end.
+
+    The one-call convenience for callers that own a ``sessionmaker``: it opens one
+    ``session_factory.begin()`` transaction, binds the COUPLED SQLite ports over that
+    session via :func:`~specsmither.adapters.lifecycle_ports.make_lifecycle_ports`, and
+    runs the (pure) verb via
+    :func:`~specsmither.lifecycle.dispatch.create_lifecycle` — so the verb's reads, the
+    WritePlan persist, and the in-transaction recompute all commit (or roll back)
+    atomically. ``clock`` / ``id_generator`` are injectable for determinism;
+    ``validator`` (when given) replaces the crucible adapter — the test seam for driving
+    the gate deterministically.
+    """
+    with session_factory.begin() as session:
+        ports = make_lifecycle_ports(session, clock=clock, id_generator=id_generator)
+        if validator is not None:
+            ports = replace(ports, validator=validator)
+        return create_lifecycle(ports).handle(event)
 
 
 def run_handover(

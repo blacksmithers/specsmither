@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.exc import IntegrityError
 
 from specsmither.adapters.lifecycle_ports import make_lifecycle_ports
+from specsmither.adapters.lifecycle_runner import run_verb
 from specsmither.dispatch.envelopes import (
     WORK_VERBS,
     ResponseDetail,
@@ -52,7 +53,7 @@ from specsmither.dispatch.error_guidance import (
     normalise_error,
     unknown_tool_guidance,
 )
-from specsmither.lifecycle.dispatch import LifecycleEvent, VerbName, run_verb
+from specsmither.lifecycle.dispatch import LifecycleEvent, VerbName
 from specsmither.lifecycle.verbs.approve import approve_handover
 from specsmither.lifecycle.verbs.reject import reject_handover
 from specsmither.lifecycle.verbs.reject_with_feedback import reject_handover_with_feedback

@@ -18,7 +18,7 @@ absent; ``list_*`` returns one entry per domain for the owner.
 Session-bound like every ``*StoreSqlite`` (subclasses :class:`SessionStore`): it runs
 inside the caller's ``Session.begin()`` and never opens or commits a transaction. The
 effective config the lifecycle scores against is then assembled by the pure resolvers
-in :mod:`specsmither.adapters.config` (``crucible.merge_config`` for the ``planning``
+in :mod:`specsmither.lifecycle.config` (``crucible.merge_config`` for the ``planning``
 domain; ``deep_merge`` for ``planning-lifecycle``).
 """
 

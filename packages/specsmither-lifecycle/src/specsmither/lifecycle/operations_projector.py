@@ -38,7 +38,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Literal
 
 from crucible.models import (
     Blueprint,
@@ -57,6 +58,14 @@ from crucible.models.enums import (
 from pydantic import BaseModel
 
 from specsmither.domain.records import DependencyEdge
+from specsmither.lifecycle.ports import (
+    BlueprintRef,
+    EpicFull,
+    SpecDependencyEdge,
+    SpecFull,
+    TicketRef,
+)
+from specsmither.lifecycle.write_plan_types import to_snake
 
 __all__ = [
     "CreateBlueprint",
@@ -71,6 +80,7 @@ __all__ = [
     "LinkBlueprintToTickets",
     "MutationOp",
     "OperationsProjector",
+    "ProjectorOperationsLayer",
     "UnlinkBlueprintFromTickets",
     "UpdateBlueprint",
     "UpdateEpic",
@@ -448,3 +458,174 @@ _DEFAULT_PROJECTOR = OperationsProjector()
 def apply_mutation(spec: Specification, op: MutationOp) -> Specification:
     """Module-level convenience over :meth:`OperationsProjector.apply`."""
     return _DEFAULT_PROJECTOR.apply(spec, op)
+
+
+# --------------------------------------------------------------------------- #
+# OperationsLayer — the pure lifecycle ports.OperationsLayer implementation     #
+# --------------------------------------------------------------------------- #
+#
+# Bridges the lifecycle's camelCase wire ops to the :data:`MutationOp` union,
+# applies them through the pure projector above (no DB), and re-derives a fresh
+# :class:`~specsmither.lifecycle.ports.SpecFull` from the projected nested model
+# so the gate can score the spec as-if-applied. DB-free: this is the pure
+# OperationsLayer the coupled seam (``adapters/lifecycle_ports.py``) binds.
+
+
+def _enum_str(value: Any) -> str:
+    """Coerce an enum member to its plain ``.value`` string (passthrough for ``str``)."""
+    return value.value if isinstance(value, Enum) else str(value)
+
+
+def _spec_full_from_spec(spec: Specification) -> SpecFull:
+    """Re-derive the flat ports views from a nested crucible :class:`Specification`.
+
+    The projector's output: ``spec`` is the projected (post-mutation) source of
+    truth; the flat ``epics`` / ``blueprints`` / ``dependencies`` are re-derived from
+    its tree (a :class:`~crucible.models.DependencyLink` ``ticket_id == Y`` on ticket
+    ``X`` is the edge ``from=X depends on to=Y``). No DB, no record status (the nested
+    authoring model carries none — irrelevant to the validator/gate this feeds).
+    """
+    epics_flat: list[EpicFull] = []
+    dependencies_flat: list[SpecDependencyEdge] = []
+    for epic in spec.epics:
+        tickets_flat: list[TicketRef] = []
+        for ticket in epic.tickets:
+            tickets_flat.append(
+                TicketRef(
+                    id=ticket.id,
+                    epic_id=ticket.epic_id,
+                    title=ticket.title,
+                    description=ticket.description,
+                )
+            )
+            for link in ticket.dependencies:
+                dependencies_flat.append(
+                    SpecDependencyEdge(from_ticket_id=ticket.id, to_ticket_id=link.ticket_id)
+                )
+        epics_flat.append(
+            EpicFull(
+                id=epic.id,
+                specification_id=epic.specification_id,
+                title=epic.title,
+                tickets=tickets_flat,
+                description=epic.description,
+            )
+        )
+    blueprints_flat = [
+        BlueprintRef(
+            id=blueprint.id,
+            specification_id=spec.id,
+            title=blueprint.title,
+            category=_enum_str(blueprint.category),
+        )
+        for blueprint in spec.blueprints
+    ]
+    return SpecFull(
+        spec=spec,
+        epics=epics_flat,
+        blueprints=blueprints_flat,
+        dependencies=dependencies_flat,
+    )
+
+
+def _snake_fields(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """A copy of an update ``fields`` map with camelCase wire keys snake-cased.
+
+    The :data:`MutationOp` update dataclasses key ``fields`` by the snake_case crucible
+    attribute name (``setattr`` lands on the real field); the lifecycle wire payload
+    is camelCase, so the keys are normalised (``to_snake`` is idempotent on snake input).
+    Values pass through untouched (re-validated when crucible re-parses the projected spec).
+    """
+    return {to_snake(str(key)): value for key, value in raw.items()}
+
+
+def _build_mutation_op(op: str, payload: Mapping[str, Any]) -> MutationOp | None:
+    """Map a lifecycle op name + camelCase payload to its :data:`MutationOp`, or ``None``.
+
+    ``None`` means "no faithful in-memory projection": ``delete_dependencies`` carries
+    opaque edge ids (``dependencyIds``) the nested tree cannot resolve to ``(from, to)``
+    pairs — the projection is a no-op, matching the SpecForge projector's
+    unchanged-on-remove behaviour. An unknown op name is likewise a no-op.
+    """
+    if op == "update_spec":
+        return UpdateSpec(fields=_snake_fields(payload.get("fields", {})))
+    if op == "create_epic":
+        return CreateEpic(
+            title=payload["title"],
+            description=payload.get("description") or "",
+            id=payload.get("id"),
+        )
+    if op == "update_epic":
+        return UpdateEpic(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
+    if op == "delete_epic":
+        return DeleteEpic(id=payload["id"])
+    if op == "create_ticket":
+        return CreateTicket(
+            epic_id=payload["epicId"],
+            title=payload["title"],
+            description=payload.get("description") or "",
+            id=payload.get("id"),
+        )
+    if op == "update_ticket":
+        return UpdateTicket(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
+    if op == "delete_ticket":
+        return DeleteTicket(id=payload["id"])
+    if op == "create_blueprint":
+        return CreateBlueprint(
+            title=payload["title"],
+            category=BlueprintCategory(payload["category"]),
+            content=payload.get("content") or "",
+            id=payload.get("id"),
+        )
+    if op == "update_blueprint":
+        return UpdateBlueprint(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
+    if op == "delete_blueprint":
+        return DeleteBlueprint(id=payload["id"])
+    if op == "link_blueprint_to_tickets":
+        return LinkBlueprintToTickets(
+            blueprint_id=payload["blueprintId"],
+            ticket_ids=list(payload.get("ticketIds", [])),
+        )
+    if op == "unlink_blueprint_to_tickets":
+        return UnlinkBlueprintFromTickets(
+            blueprint_id=payload["blueprintId"],
+            ticket_ids=list(payload.get("ticketIds", [])),
+        )
+    if op == "create_dependencies":
+        return CreateDependencies(
+            dependencies=[
+                DependencyEdgeSpec(
+                    from_ticket_id=edge["fromTicketId"], to_ticket_id=edge["toTicketId"]
+                )
+                for edge in payload.get("dependencies", [])
+            ]
+        )
+    # delete_dependencies (opaque ids) + any unknown op → unchanged projection.
+    return None
+
+
+class ProjectorOperationsLayer:
+    """:class:`~specsmither.lifecycle.ports.OperationsLayer` over the pure projector.
+
+    Stateless and DB-free: builds the :data:`MutationOp` for ``op`` / ``payload``,
+    runs it through the in-memory projector (which deep-clones, never mutating the
+    input), then rebuilds a fresh :class:`SpecFull` from the projected nested model so
+    the gate can score the spec as-if-applied.
+    """
+
+    def apply_mutation(self, op: str, payload: Mapping[str, Any], spec_full: SpecFull) -> SpecFull:
+        mutation = _build_mutation_op(op, payload)
+        if mutation is None:
+            # No faithful in-memory projection (e.g. delete by opaque edge id) →
+            # rebuild from the unchanged spec so the return shape stays consistent.
+            return _spec_full_from_spec(spec_full.spec)
+        projected = apply_mutation(spec_full.spec, mutation)
+        return _spec_full_from_spec(projected)
+
+
+if TYPE_CHECKING:
+    from specsmither.lifecycle.ports import OperationsLayer as _OperationsLayerProto
+
+    def _assert_operations(layer: ProjectorOperationsLayer) -> _OperationsLayerProto:
+        # Structural conformance guard (mypy --strict): never executed.
+        return layer

@@ -45,7 +45,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from specsmither.adapters import lifecycle_ports as lifecycle_ports_module
-from specsmither.adapters.config import resolve_validator_config
 from specsmither.adapters.crucible_validator import CrucibleValidatorAdapter
 from specsmither.adapters.lifecycle_ports import SqliteSpecStore
 from specsmither.db.base import make_session_factory
@@ -63,6 +62,7 @@ from specsmither.db.models import (
 from specsmither.db.repositories.config_store import ConfigStoreSqlite
 from specsmither.dispatch.facade import make_dispatcher
 from specsmither.domain.enums import PlanningPhase
+from specsmither.lifecycle.config import resolve_validator_config
 from specsmither.operations.crud import (
     add_dependency,
     create_blueprint,

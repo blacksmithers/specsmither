@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import ValidationError as PydanticValidationError
 
-from specsmither.adapters.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.domain.enums import (
     ActorType,
     GuidanceVariant,
@@ -34,6 +33,7 @@ from specsmither.domain.enums import (
     TransitionTrigger,
 )
 from specsmither.lifecycle.audit import build_action, build_transition
+from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.gate import evaluate_phase_gate
 from specsmither.lifecycle.guidance.compose import (
     compose_get_planning_status,

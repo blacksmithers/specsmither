@@ -9,6 +9,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "specsmither",
+    "specsmither-lifecycle",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -182,16 +188,16 @@ wheels = [
 
 [[package]]
 name = "crucible-forge"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/23/ce5d3c2861251b8af8e24e45a32aabeebb18c2f6edd49609f770f990b4f4/crucible_forge-0.1.0.tar.gz", hash = "sha256:a789780d04ef20040fb1471f5c564b1610c83bcff30f1f70144dbc258f63d37a", size = 68730, upload-time = "2026-06-25T20:47:24.762Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/ee/b14ee591216e93a35dec06cd8062465bcebb5445bfc7c7e53be50601384c/crucible_forge-0.2.0.tar.gz", hash = "sha256:ed06e9c32b47205d88b0049d6d3e70015e42a0fc586b160fb2bd8d8bc0439449", size = 70260, upload-time = "2026-07-13T17:30:21.441Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/81/e4e702de550087bf70afa325814778f1aa094bc5b5f271dbcc01482bc675/crucible_forge-0.1.0-py3-none-any.whl", hash = "sha256:bd4bf63ac125144f6740ca84e2e62279baa9c68185901bd8d578adfe642b026d", size = 108232, upload-time = "2026-06-25T20:47:23.639Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/7f/298c00b8f36db0066fb1a48afc39373d0d01e727182b52e3e22364d8db4e/crucible_forge-0.2.0-py3-none-any.whl", hash = "sha256:06398d19001f655bcf93e9a2be61ddc890a2318dad3b9d2623994862988fc152", size = 108829, upload-time = "2026-07-13T17:30:20.01Z" },
 ]
 
 [[package]]
@@ -1267,6 +1273,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-ulid" },
     { name = "pyyaml" },
+    { name = "specsmither-lifecycle" },
     { name = "sqlalchemy" },
     { name = "textual" },
 ]
@@ -1283,11 +1290,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", specifier = ">=0.1.0" },
+    { name = "crucible-forge", specifier = ">=0.2.0" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "specsmither-lifecycle", editable = "packages/specsmither-lifecycle" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "textual", specifier = ">=0.80" },
 ]
@@ -1300,6 +1308,25 @@ dev = [
     { name = "pytest-textual-snapshot", specifier = ">=1.0" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "types-pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "specsmither-lifecycle"
+version = "0.1.0"
+source = { editable = "packages/specsmither-lifecycle" }
+dependencies = [
+    { name = "crucible-forge" },
+    { name = "pydantic" },
+    { name = "python-ulid" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "crucible-forge", specifier = ">=0.2.0" },
+    { name = "pydantic", specifier = ">=2.6" },
+    { name = "python-ulid", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]

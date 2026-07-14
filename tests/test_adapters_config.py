@@ -1,5 +1,5 @@
 """Acceptance for the 0.1.0 config seam: the ``config`` table + ``ConfigStoreSqlite``
-+ the pure resolvers (:mod:`specsmither.adapters.config`).
++ the pure resolvers (:mod:`specsmither.lifecycle.config`).
 
 Drives a real on-disk SQLite database (``tmp_path`` via :func:`init_db` +
 :func:`make_session_factory`) so the upsert / round-trip / migration behaviour is
@@ -28,15 +28,6 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, insert, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from specsmither.adapters.config import (
-    PLANNING_DOMAIN,
-    PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION,
-    PLANNING_LIFECYCLE_DEFAULTS,
-    PLANNING_LIFECYCLE_DOMAIN,
-    deep_merge,
-    resolve_lifecycle_config,
-    resolve_validator_config,
-)
 from specsmither.db.base import make_engine, make_session_factory, now_iso
 from specsmither.db.migrations import (
     BASELINE_VERSION,
@@ -48,6 +39,15 @@ from specsmither.db.migrations import (
 )
 from specsmither.db.models import Base, PlanningConfig
 from specsmither.db.repositories.config_store import ConfigStoreSqlite
+from specsmither.lifecycle.config import (
+    PLANNING_DOMAIN,
+    PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION,
+    PLANNING_LIFECYCLE_DEFAULTS,
+    PLANNING_LIFECYCLE_DOMAIN,
+    deep_merge,
+    resolve_lifecycle_config,
+    resolve_validator_config,
+)
 from specsmither.lifecycle.ports import ProjectConfigEntry, SpecConfigEntry
 
 

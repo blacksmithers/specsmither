@@ -41,6 +41,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from specsmither.adapters.lifecycle_runner import run_verb
 from specsmither.db.base import make_session_factory, new_ulid, now_iso
 from specsmither.db.migrations import init_db
 from specsmither.db.models import (
@@ -53,7 +54,7 @@ from specsmither.db.models import (
     Ticket,
 )
 from specsmither.domain.enums import GuidanceVariant, PlanningPhase, PlanningSessionStatus
-from specsmither.lifecycle.dispatch import LifecycleEvent, VerbName, run_verb
+from specsmither.lifecycle.dispatch import LifecycleEvent, VerbName
 from specsmither.lifecycle.ports import SpecFull, ValidatorOutput
 
 PROJECT_ID = "01PROJECT0000000000000000A"

@@ -16,9 +16,9 @@ only them:
   DB-free ``PlanningSessionRecord`` (the ORM coupling the extraction removed); the
   concrete SQLite store maps its ORM row to the same record, and every test below
   keeps asserting the same WritePlans.
-* :func:`pure_ports` wires the operations projector. Today it uses the adapter
-  wrapper ``ProjectorOperationsLayer`` (which lives in the sqlalchemy-importing
-  ``adapters`` module); after the extraction it points at the pure projector.
+* :func:`pure_ports` wires the operations projector via the pure
+  ``ProjectorOperationsLayer`` from :mod:`specsmither.lifecycle.operations_projector`
+  (the DB-free projector — no sqlalchemy on the path).
 
 Neither swap changes any asserted WritePlan — that is the whole point.
 """
@@ -34,7 +34,6 @@ from typing import Any, cast
 from crucible.models import Specification
 from crucible.models.enums import BlueprintCategory, Complexity, TicketType
 
-from specsmither.adapters.lifecycle_ports import ProjectorOperationsLayer, _spec_full_from_spec
 from specsmither.domain.enums import PlanningPhase, PlanningSessionStatus, SpecStatus, TicketStatus
 from specsmither.domain.records import (
     BlueprintRecord,
@@ -43,6 +42,10 @@ from specsmither.domain.records import (
     SpecificationRecord,
     TicketRecord,
     build_spec_full,
+)
+from specsmither.lifecycle.operations_projector import (
+    ProjectorOperationsLayer,
+    _spec_full_from_spec,
 )
 from specsmither.lifecycle.ports import LifecyclePorts, SpecFull, ValidatorFinding, ValidatorOutput
 from specsmither.lifecycle.session_record import PlanningSessionRecord

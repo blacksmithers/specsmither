@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from specsmither.adapters.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.domain.enums import GuidanceVariant, PlanningPhase
+from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.guidance.compose import compose_response
 from specsmither.lifecycle.ports import ValidatorFinding, ValidatorOutput
 from specsmither.lifecycle.verbs.support import SessionNotFoundError, VerbResult

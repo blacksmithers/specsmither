@@ -29,7 +29,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from specsmither.adapters.crucible_validator import CrucibleValidatorAdapter
 from specsmither.adapters.lifecycle_ports import (
-    ProjectorOperationsLayer,
     SqlitePlanningSessionStore,
     SqliteSpecStore,
     make_lifecycle_ports,
@@ -44,6 +43,7 @@ from specsmither.db.models import (
     TicketDependency,
 )
 from specsmither.domain.enums import PlanningPhase
+from specsmither.lifecycle.operations_projector import ProjectorOperationsLayer
 from specsmither.lifecycle.ports import (
     BlueprintRef,
     EpicFull,

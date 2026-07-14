@@ -32,7 +32,6 @@ full one-txn-per-mutation behaviour.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
@@ -81,6 +80,7 @@ from specsmither.lifecycle.write_plan_types import (
     SpecMutation,
     WritePlan,
     WritePlanItem,
+    to_snake,
 )
 from specsmither.operations.errors import NotFoundError, to_crud_error
 from specsmither.rollups.recompute import recompute
@@ -165,9 +165,6 @@ def table_model(table: str) -> type[Base]:
 # key normalisation + field filtering                                          #
 # --------------------------------------------------------------------------- #
 
-_CAMEL_BOUNDARY_1 = re.compile(r"(.)([A-Z][a-z]+)")
-_CAMEL_BOUNDARY_2 = re.compile(r"([a-z0-9])([A-Z])")
-
 #: Producer key (already snake-cased) → ORM attribute name where they diverge.
 #: ``metadata`` is reserved on the declarative class, so PlanningSession maps the
 #: ``metadata`` column to the ``session_metadata`` attribute.
@@ -175,12 +172,6 @@ _COLUMN_ALIASES = {"metadata": "session_metadata"}
 
 #: The parent-linkage columns the affected-spec resolver inspects, in precedence order.
 _LINKAGE_ATTRS = ("specification_id", "ticket_id", "epic_id", "planning_session_id")
-
-
-def to_snake(name: str) -> str:
-    """Normalise a (possibly camelCase) producer key to snake_case (idempotent)."""
-    stage = _CAMEL_BOUNDARY_1.sub(r"\1_\2", name)
-    return _CAMEL_BOUNDARY_2.sub(r"\1_\2", stage).lower()
 
 
 @cache

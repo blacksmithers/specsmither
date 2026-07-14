@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "specsmither-lifecycle"
+version = "0.1.0"
+description = "The PURE planning-lifecycle core of SpecSmither — the crucible-gated verb surface (start/action/complete/inspect + handovers), the in-memory operations projector, the WritePlan data contract, and the domain records. No SQLAlchemy, no Textual, no MCP."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Gabriel Augusto Gonçalves", email = "gab.augustog@gmail.com" }]
+keywords = ["spec", "specforge", "specsmither", "planning", "lifecycle", "crucible"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+# The PURE core deps ONLY — the whole point of the split. NO sqlalchemy/textual/mcp.
+dependencies = [
+    "crucible-forge>=0.2.0",
+    "pydantic>=2.6",
+    "python-ulid>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/blacksmithers/specsmither"
+Repository = "https://github.com/blacksmithers/specsmither"
+Issues = "https://github.com/blacksmithers/specsmither/issues"
+
+# PEP 420 namespace package: this dist contributes ``specsmither.lifecycle`` /
+# ``specsmither.domain`` / ``specsmither.ids`` to the shared ``specsmither`` namespace
+# (there is intentionally NO src/specsmither/__init__.py). The product dist
+# ``specsmither`` contributes the rest of the namespace.
+[tool.hatch.build.targets.wheel]
+packages = ["src/specsmither"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/specsmither", "README.md"]

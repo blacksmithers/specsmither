@@ -21,6 +21,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    # The pure planning-lifecycle core — split into its own independently-publishable
+    # dist (shares the ``specsmither`` PEP 420 namespace). Resolved from the workspace
+    # in dev (see [tool.uv.sources]); from PyPI for a published build.
+    "specsmither-lifecycle",
     "crucible-forge>=0.2.0",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
@@ -34,6 +38,19 @@ dependencies = [
 Homepage = "https://github.com/blacksmithers/specsmither"
 Repository = "https://github.com/blacksmithers/specsmither"
 Issues = "https://github.com/blacksmithers/specsmither/issues"
+
+# ---------------------------------------------------------------------------- #
+# uv workspace: two independently-publishable dists sharing the ``specsmither``
+# PEP 420 namespace. This root dist is ``specsmither`` (the product surface —
+# db/adapters/dispatch/tui/mcp/rollups/dag); the member is ``specsmither-lifecycle``
+# (the pure core). In dev the product resolves the core from the workspace source;
+# a published build resolves it from PyPI.
+# ---------------------------------------------------------------------------- #
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+specsmither-lifecycle = { workspace = true }
 
 # Entrypoints. `specsmither` opens the Textual TUI Observatory (the human surface);
 # `specsmither-mcp` is the agent surface — the MCP stdio server over the user-global
@@ -76,12 +93,27 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 # contains × – → ≥ etc.; preserving them is required for parity.
 ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 
+[tool.ruff.lint.isort]
+# The ``specsmither`` namespace is split across two source trees (the product ``src``
+# and the pure ``packages/specsmither-lifecycle/src``), so pin it first-party explicitly
+# — otherwise isort classifies the relocated ``specsmither.lifecycle`` / ``.domain`` /
+# ``.ids`` as third-party (they no longer live under ``src/specsmither``).
+known-first-party = ["specsmither"]
+# ``src/specsmither`` is now a PEP 420 namespace (no __init__.py), so isort auto-detects
+# its child dirs as first-party roots — which collides with the third-party ``mcp`` SDK
+# (vs the ``specsmither.mcp`` subpackage). Pin the SDK third-party.
+known-third-party = ["mcp"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
-mypy_path = "src"
+# The ``specsmither`` namespace spans both dist source roots; put both on the mypy
+# search path so ``mypy src/specsmither`` resolves the pure core from source too.
+mypy_path = "src:packages/specsmither-lifecycle/src"
+namespace_packages = true
+explicit_package_bases = true
 packages = ["specsmither"]
 
 [tool.pytest.ini_options]

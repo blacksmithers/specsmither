@@ -12,21 +12,17 @@ the dispatch union; the three handover verbs are deliberately NOT here (they are
 webapp/CLI-called entrypoints built separately, mirroring the TS design where
 ``approveHandover`` / ``rejectHandover*`` are not part of ``handle``).
 
-:func:`run_verb` is the one-call convenience for callers that own a
-``sessionmaker``: it opens one ``session_factory.begin()`` transaction, binds the
-COUPLED ports over that session via
-:func:`~specsmither.adapters.lifecycle_ports.make_lifecycle_ports`, and runs the verb
-— so the verb's reads, the WritePlan persist, and the in-transaction recompute all
-commit (or roll back) atomically. ``clock`` / ``id_generator`` are injectable for
-determinism; ``validator`` swaps the crucible adapter for a stub in tests.
+This module is PURE (no sqlalchemy): it dispatches to the verbs and persists via the
+injected ``persist_write_plan`` port. The transactional one-call convenience that binds
+the COUPLED SQLite ports over a ``sessionmaker`` — ``run_verb`` — lives on the product
+side in :func:`specsmither.adapters.lifecycle_runner.run_verb`.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from specsmither.adapters.lifecycle_ports import make_lifecycle_ports
 from specsmither.lifecycle.verbs.action import action_planning_session
 from specsmither.lifecycle.verbs.complete import complete_planning_session
 from specsmither.lifecycle.verbs.inspect import inspect_planning_session
@@ -36,17 +32,14 @@ from specsmither.lifecycle.verbs.support import VerbResult
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from sqlalchemy.orm import Session, sessionmaker
-
     from specsmither.lifecycle.guidance.types import PlanningAgentResponse
-    from specsmither.lifecycle.ports import Clock, IdGenerator, LifecyclePorts, Validator
+    from specsmither.lifecycle.ports import LifecyclePorts
 
 __all__ = [
     "Lifecycle",
     "LifecycleEvent",
     "VerbName",
     "create_lifecycle",
-    "run_verb",
 ]
 
 #: The four agent-facing verb names the dispatch union routes.
@@ -105,25 +98,3 @@ def _dispatch(event: LifecycleEvent, ports: LifecyclePorts) -> VerbResult:
     if event.verb == "inspect":
         return inspect_planning_session(event.payload, ports)
     raise ValueError(f"Unknown lifecycle verb: {event.verb!r}")
-
-
-def run_verb(
-    session_factory: sessionmaker[Session],
-    event: LifecycleEvent,
-    *,
-    clock: Clock | None = None,
-    id_generator: IdGenerator | None = None,
-    validator: Validator | None = None,
-) -> PlanningAgentResponse:
-    """Open one transaction, bind the ports, and run ``event`` end-to-end.
-
-    The verb's reads, the WritePlan persist, and the recompute worklist all run inside
-    the single ``session_factory.begin()`` transaction (one ``BEGIN IMMEDIATE``), then
-    commit together. ``validator`` (when given) replaces the crucible adapter — the
-    test seam for driving the gate deterministically.
-    """
-    with session_factory.begin() as session:
-        ports = make_lifecycle_ports(session, clock=clock, id_generator=id_generator)
-        if validator is not None:
-            ports = replace(ports, validator=validator)
-        return create_lifecycle(ports).handle(event)

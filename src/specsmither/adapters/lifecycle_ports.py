@@ -22,11 +22,10 @@ What lives here (everything else the lifecycle imports is already PURE):
   :class:`~crucible.models.Specification` via
   :func:`~specsmither.domain.records.build_spec_full`, and assembles the flat
   ``epics`` / ``blueprints`` / ``dependencies`` side-projections the pre-checks read.
-* :class:`ProjectorOperationsLayer` — :class:`~specsmither.lifecycle.ports.OperationsLayer`.
-  Bridges the lifecycle's camelCase wire ops to the M0 ``MutationOp`` union, applies
-  them through the pure in-memory projector (no DB), and rebuilds a fresh
-  :class:`~specsmither.lifecycle.ports.SpecFull` from the projected nested model.
 
+The :class:`~specsmither.lifecycle.operations_projector.ProjectorOperationsLayer`
+(:class:`~specsmither.lifecycle.ports.OperationsLayer`) is DB-free and now lives with
+the pure lifecycle core; :func:`make_lifecycle_ports` binds an instance straight through.
 ``ConfigStoreSqlite`` (config seam) and ``CrucibleValidatorAdapter`` (crucible seam)
 are already built (work items #5/#7) and are bound straight through by the factory.
 """
@@ -38,29 +37,10 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from crucible.models import Specification
-from crucible.models.enums import BlueprintCategory
 from sqlalchemy import select
 
 from specsmither.adapters.crucible_validator import CrucibleValidatorAdapter
-from specsmither.adapters.in_memory_operations import (
-    CreateBlueprint,
-    CreateDependencies,
-    CreateEpic,
-    CreateTicket,
-    DeleteBlueprint,
-    DeleteEpic,
-    DeleteTicket,
-    DependencyEdgeSpec,
-    LinkBlueprintToTickets,
-    MutationOp,
-    UnlinkBlueprintFromTickets,
-    UpdateBlueprint,
-    UpdateEpic,
-    UpdateSpec,
-    UpdateTicket,
-)
-from specsmither.adapters.in_memory_operations import apply_mutation as project_mutation
-from specsmither.adapters.write_plan_executor import WritePlan, apply_write_plan, to_snake
+from specsmither.adapters.write_plan_executor import WritePlan, apply_write_plan
 from specsmither.db.base import new_ulid
 from specsmither.db.models import Epic as EpicRow
 from specsmither.db.models import PlanningSession
@@ -79,6 +59,7 @@ from specsmither.domain.records import (
 from specsmither.domain.records import (
     TicketBlueprintRef as TicketBlueprintRefRecord,
 )
+from specsmither.lifecycle.operations_projector import ProjectorOperationsLayer
 from specsmither.lifecycle.ports import (
     BlueprintRef,
     EpicFull,
@@ -91,16 +72,11 @@ from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.operations.errors import NotFoundError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from sqlalchemy.orm import Session
 
     from specsmither.lifecycle.ports import (
         Clock,
         IdGenerator,
-    )
-    from specsmither.lifecycle.ports import (
-        OperationsLayer as _OperationsLayerProto,
     )
     from specsmither.lifecycle.ports import (
         PlanningSessionStore as _PlanningSessionStoreProto,
@@ -110,7 +86,6 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
-    "ProjectorOperationsLayer",
     "SqlitePlanningSessionStore",
     "SqliteSpecStore",
     "make_lifecycle_ports",
@@ -177,58 +152,6 @@ def _blueprint_ref_from_record(record: BlueprintRecord) -> BlueprintRef:
         title=record.title,
         category=_enum_str(record.category),
         extra=_record_extra(record),
-    )
-
-
-def _spec_full_from_spec(spec: Specification) -> SpecFull:
-    """Re-derive the flat ports views from a nested crucible :class:`Specification`.
-
-    The projector's output: ``spec`` is the projected (post-mutation) source of
-    truth; the flat ``epics`` / ``blueprints`` / ``dependencies`` are re-derived from
-    its tree (a :class:`~crucible.models.DependencyLink` ``ticket_id == Y`` on ticket
-    ``X`` is the edge ``from=X depends on to=Y``). No DB, no record status (the nested
-    authoring model carries none — irrelevant to the validator/gate this feeds).
-    """
-    epics_flat: list[EpicFull] = []
-    dependencies_flat: list[SpecDependencyEdge] = []
-    for epic in spec.epics:
-        tickets_flat: list[TicketRef] = []
-        for ticket in epic.tickets:
-            tickets_flat.append(
-                TicketRef(
-                    id=ticket.id,
-                    epic_id=ticket.epic_id,
-                    title=ticket.title,
-                    description=ticket.description,
-                )
-            )
-            for link in ticket.dependencies:
-                dependencies_flat.append(
-                    SpecDependencyEdge(from_ticket_id=ticket.id, to_ticket_id=link.ticket_id)
-                )
-        epics_flat.append(
-            EpicFull(
-                id=epic.id,
-                specification_id=epic.specification_id,
-                title=epic.title,
-                tickets=tickets_flat,
-                description=epic.description,
-            )
-        )
-    blueprints_flat = [
-        BlueprintRef(
-            id=blueprint.id,
-            specification_id=spec.id,
-            title=blueprint.title,
-            category=_enum_str(blueprint.category),
-        )
-        for blueprint in spec.blueprints
-    ]
-    return SpecFull(
-        spec=spec,
-        epics=epics_flat,
-        blueprints=blueprints_flat,
-        dependencies=dependencies_flat,
     )
 
 
@@ -413,108 +336,6 @@ class SqliteSpecStore:
 
 
 # --------------------------------------------------------------------------- #
-# OperationsLayer                                                               #
-# --------------------------------------------------------------------------- #
-
-
-def _snake_fields(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """A copy of an update ``fields`` map with camelCase wire keys snake-cased.
-
-    The M0 ``MutationOp`` update dataclasses key ``fields`` by the snake_case crucible
-    attribute name (``setattr`` lands on the real field); the lifecycle wire payload
-    is camelCase, so the keys are normalised (``to_snake`` is idempotent on snake input).
-    Values pass through untouched (re-validated when crucible re-parses the projected spec).
-    """
-    return {to_snake(str(key)): value for key, value in raw.items()}
-
-
-def _build_mutation_op(op: str, payload: Mapping[str, Any]) -> MutationOp | None:
-    """Map a lifecycle op name + camelCase payload to its :data:`MutationOp`, or ``None``.
-
-    ``None`` means "no faithful in-memory projection": ``delete_dependencies`` carries
-    opaque edge ids (``dependencyIds``) the nested tree cannot resolve to ``(from, to)``
-    pairs — the projection is a no-op, matching the SpecForge projector's
-    unchanged-on-remove behaviour. An unknown op name is likewise a no-op.
-    """
-    if op == "update_spec":
-        return UpdateSpec(fields=_snake_fields(payload.get("fields", {})))
-    if op == "create_epic":
-        return CreateEpic(
-            title=payload["title"],
-            description=payload.get("description") or "",
-            id=payload.get("id"),
-        )
-    if op == "update_epic":
-        return UpdateEpic(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
-    if op == "delete_epic":
-        return DeleteEpic(id=payload["id"])
-    if op == "create_ticket":
-        return CreateTicket(
-            epic_id=payload["epicId"],
-            title=payload["title"],
-            description=payload.get("description") or "",
-            id=payload.get("id"),
-        )
-    if op == "update_ticket":
-        return UpdateTicket(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
-    if op == "delete_ticket":
-        return DeleteTicket(id=payload["id"])
-    if op == "create_blueprint":
-        return CreateBlueprint(
-            title=payload["title"],
-            category=BlueprintCategory(payload["category"]),
-            content=payload.get("content") or "",
-            id=payload.get("id"),
-        )
-    if op == "update_blueprint":
-        return UpdateBlueprint(id=payload["id"], fields=_snake_fields(payload.get("fields", {})))
-    if op == "delete_blueprint":
-        return DeleteBlueprint(id=payload["id"])
-    if op == "link_blueprint_to_tickets":
-        return LinkBlueprintToTickets(
-            blueprint_id=payload["blueprintId"],
-            ticket_ids=list(payload.get("ticketIds", [])),
-        )
-    if op == "unlink_blueprint_to_tickets":
-        return UnlinkBlueprintFromTickets(
-            blueprint_id=payload["blueprintId"],
-            ticket_ids=list(payload.get("ticketIds", [])),
-        )
-    if op == "create_dependencies":
-        return CreateDependencies(
-            dependencies=[
-                DependencyEdgeSpec(
-                    from_ticket_id=edge["fromTicketId"], to_ticket_id=edge["toTicketId"]
-                )
-                for edge in payload.get("dependencies", [])
-            ]
-        )
-    # delete_dependencies (opaque ids) + any unknown op → unchanged projection.
-    return None
-
-
-class ProjectorOperationsLayer:
-    """:class:`~specsmither.lifecycle.ports.OperationsLayer` over the pure M0 projector.
-
-    Stateless and DB-free: builds the :data:`MutationOp` for ``op`` / ``payload``,
-    runs it through the in-memory projector (which deep-clones, never mutating the
-    input), then rebuilds a fresh :class:`SpecFull` from the projected nested model so
-    the gate can score the spec as-if-applied.
-    """
-
-    def apply_mutation(
-        self, op: str, payload: Mapping[str, Any], spec_full: SpecFull
-    ) -> SpecFull:
-        mutation = _build_mutation_op(op, payload)
-        if mutation is None:
-            # No faithful in-memory projection (e.g. delete by opaque edge id) →
-            # rebuild from the unchanged spec so the return shape stays consistent.
-            return _spec_full_from_spec(spec_full.spec)
-        projected = project_mutation(spec_full.spec, mutation)
-        return _spec_full_from_spec(projected)
-
-
-# --------------------------------------------------------------------------- #
 # The factory (the COUPLED seam, A1 §5)                                         #
 # --------------------------------------------------------------------------- #
 
@@ -560,6 +381,3 @@ if TYPE_CHECKING:
 
     def _assert_spec_store(store: SqliteSpecStore) -> _SpecStoreProto:
         return store
-
-    def _assert_operations(layer: ProjectorOperationsLayer) -> _OperationsLayerProto:
-        return layer

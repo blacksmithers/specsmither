@@ -1,4 +1,4 @@
-"""Tests for the pure :mod:`specsmither.adapters.in_memory_operations` projector.
+"""Tests for the pure :mod:`specsmither.lifecycle.operations_projector` projector.
 
 Three guarantees, mirroring the work-item #17 contract:
 
@@ -30,7 +30,19 @@ from crucible.models.enums import (
     TestType as _TestType,  # aliased: bare `TestType` trips pytest class collection
 )
 
-from specsmither.adapters.in_memory_operations import (
+from specsmither.db.base import make_session_factory
+from specsmither.db.migrations import init_db
+from specsmither.db.repositories import AllStores, ProjectRecord, make_stores
+from specsmither.domain.enums import SpecStatus, TicketStatus
+from specsmither.domain.records import (
+    BlueprintRecord,
+    DependencyEdge,
+    EpicRecord,
+    SpecificationRecord,
+    TicketRecord,
+    build_spec_full,
+)
+from specsmither.lifecycle.operations_projector import (
     CreateBlueprint,
     CreateDependencies,
     CreateEpic,
@@ -48,18 +60,6 @@ from specsmither.adapters.in_memory_operations import (
     UpdateTicket,
     apply_mutation,
     project_dependency_edges,
-)
-from specsmither.db.base import make_session_factory
-from specsmither.db.migrations import init_db
-from specsmither.db.repositories import AllStores, ProjectRecord, make_stores
-from specsmither.domain.enums import SpecStatus, TicketStatus
-from specsmither.domain.records import (
-    BlueprintRecord,
-    DependencyEdge,
-    EpicRecord,
-    SpecificationRecord,
-    TicketRecord,
-    build_spec_full,
 )
 
 PROJECT_ID = "proj-1"
