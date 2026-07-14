@@ -1,19 +1,51 @@
 name: Publish
 
+# Two independently-versioned distributions live in this one uv workspace and
+# publish to two PyPI projects from a SINGLE repo, routed by tag PREFIX:
+#
+#   v<x.y.z>            -> specsmither            (the product; env: pypi)
+#   lifecycle-v<x.y.z>  -> specsmither-lifecycle  (the pure core; env: pypi-lifecycle)
+#
+# Trusted Publishing (OIDC) — no API token stored. Each PyPI project needs its own
+# Trusted Publisher pointing at repo blacksmithers/specsmither, workflow publish.yml,
+# and its matching GitHub environment (pypi / pypi-lifecycle). Create those two
+# environments in the repo settings before the first release.
 on:
   push:
-    tags: ["v*"]
-  workflow_dispatch:  # allow a manual release from the Actions tab
+    tags: ["v*", "lifecycle-v*"]
+  workflow_dispatch:  # manual release from the Actions tab
+    inputs:
+      package:
+        description: "Package to publish"
+        type: choice
+        options: ["specsmither", "specsmither-lifecycle"]
+        default: "specsmither"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.pick.outputs.package }}
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-      - name: Build sdist + wheel
-        run: uv build
+      - name: Pick the package (tag prefix, or the manual input)
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            pkg="${{ inputs.package }}"
+          else
+            case "${{ github.ref_name }}" in
+              lifecycle-v*) pkg="specsmither-lifecycle" ;;
+              v*)           pkg="specsmither" ;;
+              *) echo "::error::tag '${{ github.ref_name }}' matches no known package prefix"; exit 1 ;;
+            esac
+          fi
+          echo "package=$pkg" >> "$GITHUB_OUTPUT"
+          echo "Publishing package: $pkg"
+      - name: Build sdist + wheel (scoped to the picked package)
+        run: uv build --package "${{ steps.pick.outputs.package }}"
       - name: Check metadata
         run: uvx twine check dist/*
       - uses: actions/upload-artifact@v4
@@ -21,12 +53,12 @@ jobs:
           name: dist
           path: dist/
 
-  publish:
+  # One publish job per PyPI project — each carries its own OIDC-scoped environment.
+  # The `if` selects exactly one, based on what `build` resolved.
+  publish-specsmither:
     needs: build
+    if: needs.build.outputs.package == 'specsmither'
     runs-on: ubuntu-latest
-    # Trusted Publishing (OIDC) — configure the publisher on PyPI for
-    # blacksmithers/specsmither (project: specsmither, workflow: publish.yml,
-    # environment: pypi). No API token is stored in the repo.
     environment: pypi
     permissions:
       id-token: write
@@ -35,5 +67,20 @@ jobs:
         with:
           name: dist
           path: dist/
-      - name: Publish to PyPI
+      - name: Publish specsmither to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-specsmither-lifecycle:
+    needs: build
+    if: needs.build.outputs.package == 'specsmither-lifecycle'
+    runs-on: ubuntu-latest
+    environment: pypi-lifecycle
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish specsmither-lifecycle to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
