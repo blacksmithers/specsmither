@@ -16,6 +16,7 @@
     "label.advancesTo": "a sessão avança para {phase}",
 
     "findings.summary": "{count} constatação(ões) em {categories} categoria(s).",
+    "move.applyFeedback": "Aplique o feedback do humano à entidade relevante.",
 
     "body.gatePassed": "Fase {idx} de 6 — {human}: o gate está passando (pontuação {score}, limite {threshold}). Continue refinando via {native}, ou chame `complete_planning_session` para entregar a especificação a um revisor humano.",
     "body.gatePassed.nextSuffix": " {nextCount} entidade(s) estão listadas para uma passada final opcional.",

@@ -467,6 +467,18 @@ def compose_response(
     findings = list(validator_output.findings) if validator_output is not None else []
     summarized, findings_summary = _summarize_findings(findings, language)
     moves = _recommended_moves(findings)
+    # The human_feedback_received status variant carries no validator findings (it never
+    # re-validates), so seed a single synthetic move — the phase's first native op, framed
+    # as "apply the feedback" — so the poll still tells the agent what to do next.
+    if variant == GuidanceVariant.HUMAN_FEEDBACK_RECEIVED and not moves:
+        native_ops = _native_ops_for_phase(phase)
+        if native_ops:
+            moves = [
+                RecommendedMove(
+                    operation=native_ops[0],
+                    rationale=t(language, "move.applyFeedback"),
+                )
+            ]
     next_entities = _next_entities(gate_result, _max_next_entities(lifecycle_config))
 
     feedback = session.pending_human_feedback

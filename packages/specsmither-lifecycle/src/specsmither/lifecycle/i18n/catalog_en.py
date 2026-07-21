@@ -32,6 +32,7 @@ TEXT_EN: dict[str, str] = {
     "label.advancesTo": "the session advances to {phase}",
     # -- structured side-block prose ------------------------------------------
     "findings.summary": "{count} finding(s) across {categories} category/categories.",
+    "move.applyFeedback": "Apply the human's feedback to the relevant entity.",
     # -- variant bodies (compose_body) ----------------------------------------
     "body.gatePassed": (
         "Phase {idx} of 6 — {human}: the gate is passing (score {score}, threshold "
