@@ -1,0 +1,47 @@
+# Overlay pt-BR para a fase ticket_decomposition — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos.
+
+phaseHumanName: "Decomposição de Tickets"
+phaseGoal: "Quebrar cada épico em tickets atômicos — apenas o cabeçalho (o corpo vem na Fase 5). Cada ticket cabe em um único PR (unidades de ~meio dia a 2 dias)."
+phaseCharacter: "julgamento humano + estrutural; o motor impl-verification-ratio é executado."
+
+fields:
+  - field: ticket.epicId
+    description: "Épico pai. O campo do schema é `epicId` — NÃO `parentEpicId`."
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.title
+    description: "Título curto e descritivo."
+    interview_hooks:
+      - "Qual é o rótulo de uma linha?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.ticketType
+    description: "O campo do schema é `ticketType` — NÃO `type`."
+    interview_hooks:
+      - "Isto é entrega de código/funcionalidade (implementation) ou teste/prova (verification)?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.complexity
+    description: "Determina os complexityDrivenMinCounts dos campos de corpo da Fase 5. Seja honesto — marcar xlarge para um ticket pequeno infla o trabalho da Fase 5."
+    interview_hooks:
+      - "Qual a complexidade disto — meio dia, um dia, dois dias ou uma semana?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.estimatedMinutes
+    description: "Estimativa aproximada. Usada para planejamento de capacidade."
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.order
+    description: "Ordem de classificação dentro do épico."
+
+  - field: ticket.description
+    description: "Resumo de um parágrafo sobre o que este ticket entrega."
+    na_when: "nunca (campo obrigatório)"
+
+  - field: ticket.dependencies
+    description: "Dependências de outros tickets. Refinadas na Fase 6 (cross_validation)."
+    interview_hooks:
+      - "Qual outro ticket precisa terminar antes deste?"
+      - "O que este ticket bloqueia?"
+    na_when: "ticket fundacional sem trabalho anterior; setup independente intencionalmente isolado"

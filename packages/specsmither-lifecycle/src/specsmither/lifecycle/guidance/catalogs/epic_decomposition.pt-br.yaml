@@ -1,0 +1,53 @@
+# Overlay pt-BR para a fase epic_decomposition — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos.
+
+phaseHumanName: "Decomposição de Épicos"
+phaseGoal: "Decidir quantos épicos a spec terá. Criar as cascas dos épicos (apenas o cabeçalho — o corpo vem na Fase 3). Criar blueprints arquiteturais reutilizáveis."
+phaseCharacter: "julgamento humano para 'a decomposição é suficiente'; o validador executa o motor de razão blueprint-épico + verificação de contagem (2-15 épicos)."
+
+fields:
+  - field: epic.title
+    description: "Nome curto e descritivo — 3 a 7 palavras."
+    interview_hooks:
+      - "Qual é o rótulo de uma linha para este épico?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: epic.description
+    description: "Resumo de um parágrafo sobre o que este épico cobre."
+    interview_hooks:
+      - "O que este épico entrega, em um parágrafo?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: epic.objective
+    description: "O 'porquê' — resultado concreto que este épico habilita quando todos os seus tickets estiverem completos. Distinto de description (que é o 'o quê'). O validador exige >=100 caracteres."
+    interview_hooks:
+      - "Por que este épico? O que ele destrava?"
+      - "Qual mudança visível ao usuário / ao sistema a conclusão deste épico produz?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: epic.order
+    description: "Ordem de classificação entre os épicos da spec."
+    na_when: "sem ordenação preferida"
+
+  - field: blueprint.title
+    description: "Título curto para o blueprint."
+    interview_hooks:
+      - "O que este blueprint descreve?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: blueprint.category
+    description: "Tipo de artefato."
+    na_when: "nunca (campo obrigatório)"
+
+  - field: blueprint.content
+    description: "O corpo do artefato — texto, mermaid, ascii, mockup, etc."
+    na_when: "nunca (campo obrigatório)"
+
+  - field: blueprint.description
+    description: "Descrição opcional de uma linha sobre o que o blueprint cobre."
+
+  - field: blueprint.format
+    description: "Formato do conteúdo."
+
+  - field: blueprint.coverageType
+    description: "Se este blueprint cobre tickets individuais ou se aplica a toda a spec."

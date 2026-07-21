@@ -1,0 +1,117 @@
+# Overlay pt-BR para a fase planning_spec — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos.
+
+phaseHumanName: "Fundação da Spec"
+phaseGoal: "Articular o problema no nível da Especificação — objetivos, requisitos, NFRs, guardrails em nível de código, arquitetura, escopo, stack de tecnologia (provedor de nuvem quando aplicável), topologia de pastas e critérios de aceitação em nível de sistema."
+phaseCharacter: "conduzida por entrevista; o agente coleta do usuário e preenche incrementalmente via APS."
+
+fields:
+  - field: spec.description
+    description: "Breve descrição de um parágrafo sobre do que se trata esta spec."
+    interview_hooks:
+      - "Se você tivesse que descrever esta spec em um parágrafo, o que diria?"
+    na_when: "nunca (opcional, mas sem mecanismo de NA)"
+
+  - field: spec.background
+    description: "Contexto sobre por que esta spec existe — sistemas anteriores, lições aprendidas, motivação."
+    interview_hooks:
+      - "O que veio antes disto? O que não funcionou?"
+      - "Por que estamos construindo isto agora e não depois?"
+    na_when: "specs de ferramentas internas / projetos greenfield sem contexto anterior"
+
+  - field: spec.goals
+    description: "Objetivos de alto nível. Cada objetivo tem uma estrutura definida com critérios de sucesso mensuráveis. O `id` é atribuído automaticamente internamente — nunca o passe."
+    interview_hooks:
+      - "Qual é o resultado percebido pelo usuário?"
+      - "Como mediremos o sucesso — qual número muda?"
+      - "Isto é de negócio, técnico, voltado ao usuário ou operacional?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.requirements
+    description: "Requisitos funcionais + não funcionais. Cada um mapeia para um ou mais épicos na Fase 2. O `id` é atribuído automaticamente internamente (no requisito e em cada item aninhado de acceptanceCriteria) — nunca o passe."
+    interview_hooks:
+      - "O que o sistema DEVE fazer?"
+      - "O que ele NÃO DEVE fazer?"
+      - "De onde veio este requisito — usuário, regulador, operações?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.architecture
+    description: "Decisão de arquitetura de alto nível — padrões, camadas, principais trade-offs."
+    interview_hooks:
+      - "Como isto é dividido — monolito / microsserviços / híbrido?"
+      - "Quais são as fronteiras principais?"
+      - "Quais padrões arquiteturais orientam isto — event-sourced, CQRS, etc?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.scope.inScope
+    description: "O que esta spec cobre. Restringe os requisitos e evita desvio de tickets mais adiante. O ScopeSchema exige >= 3 entradas."
+    interview_hooks:
+      - "O que está DENTRO desta spec?"
+      - "Quais comportamentos visíveis ao usuário a v1 assume?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.scope.outOfScope
+    description: "Não-objetivos explícitos. Evita o alargamento de escopo durante a expansão de épicos e tickets."
+    interview_hooks:
+      - "O que está deliberadamente FORA da v1?"
+      - "O que foi adiado para uma spec futura?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.scope.assumptions
+    description: "Crenças implícitas sobre as quais a arquitetura se apoia (sobre tráfego, formato dos dados, tamanho da equipe, infraestrutura)."
+    interview_hooks:
+      - "O que estamos assumindo sobre tráfego / dados / equipe que, se estiver errado, quebraria o plano?"
+    na_when: "a spec não tem suposições arquiteturais dignas de registro — forneça uma justificativa com >=20 caracteres"
+
+  - field: spec.scope.externalDependencies
+    description: "APIs de terceiros, infraestrutura e serviços de fornecedores dos quais a spec depende. Definem os modos de falha contra os quais a implementação deve se proteger."
+    interview_hooks:
+      - "Quais sistemas externos precisam estar no ar para isto funcionar?"
+    na_when: "a spec é totalmente autocontida — forneça uma justificativa com >=20 caracteres"
+
+  - field: spec.techStack
+    description: "Itens da stack de tecnologia, cada um marcado com sua camada. Se o sistema roda em uma nuvem, nomeie o provedor explicitamente como um item de `infrastructure` (AWS / GCP / Azure); se for on-prem / self-hosted, diga isso em vez disso."
+    interview_hooks:
+      - "Qual nuvem, se houver? (AWS / GCP / Azure / on-prem)"
+      - "Qual runtime — Node, Bun, Deno, Python, Go?"
+      - "Qual motor de banco de dados?"
+      - "O que já está em uso versus o que é novo a introduzir?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.folderStructures
+    description: "Apenas a topologia macro de pastas — pacotes/serviços de alto nível. As estruturas de arquivos por épico ficam na Fase 3 (epic.fileStructures). M4.17. O `id` é atribuído automaticamente internamente — nunca o passe."
+    na_when: "nunca (campo obrigatório; M4.17)"
+
+  - field: spec.acceptanceCriteria
+    description: "Critérios de aceitação BDD de alto nível — resultados em nível de sistema. O `id` é atribuído automaticamente internamente — nunca o passe. O `order` é opcional: preenchido automaticamente pela posição se omitido, ou defina-o para controlar a ordenação."
+    interview_hooks:
+      - "Como sabemos que o sistema como um todo funciona?"
+      - "Qual é o cenário de smoke test?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.nonFunctionalRequirements
+    description: "NFRs — desempenho, escalabilidade, segurança, disponibilidade, etc. Distintos de spec.requirements (que são funcionais). O `id` é atribuído automaticamente internamente — nunca o passe."
+    interview_hooks:
+      - "Quais números precisamos atingir — RPS, latência, uptime?"
+      - "Quais garantias de segurança?"
+      - "Qual escala precisamos suportar?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.guardrails
+    description: "Guardrails em nível de código — o que NÃO fazer. Categorias: technical / business / regulatory / ethical / operational. O `id` é atribuído automaticamente internamente — nunca o passe."
+    interview_hooks:
+      - "Quais padrões estamos evitando explicitamente?"
+      - "Existem restrições legais/regulatórias?"
+      - "O que já foi um problema antes que queremos prevenir?"
+    na_when: "nunca (campo obrigatório)"
+
+  - field: spec.sharedPatterns
+    description: "Padrões compartilhados em nível de spec — conjunto de herança BASE mesclado ao sharedPatterns de cada Épico pelo nome. Cada padrão carrega 5 slots de herança opcionais: codeStandards (errorHandling/naming/language + chaves livres), commonImports (string[]), returnTypes (Record<string,string>), additionalImports (string[]), commonFiles (Record<string,string>). Use-os para comunicar convenções que atravessam a spec em vez de campos de topo removidos. O `id` é atribuído automaticamente internamente — nunca o passe."
+    interview_hooks:
+      - "Quais convenções em nível de código se aplicam a todos os épicos — tratamento de erros, estilo de imports, idiomas de tipo de retorno?"
+      - "Existem imports auxiliares compartilhados ou scaffolds de arquivo padrão que todo épico deveria usar?"
+    na_when: "a spec não tem convenções transversais dignas de documentação — forneça uma justificativa com >=20 caracteres"
+
+  - field: spec.epicTargets
+    description: "Dica opcional para a Fase 2 — contagem e distribuição esperadas de épicos. M4.4-bonus."
+    na_when: "sem preferência; deixe o agente decidir na Fase 2"

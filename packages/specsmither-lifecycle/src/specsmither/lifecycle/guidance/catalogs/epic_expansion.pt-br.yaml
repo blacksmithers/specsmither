@@ -1,0 +1,80 @@
+# Overlay pt-BR para a fase epic_expansion — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos.
+
+phaseHumanName: "Expansão de Épicos"
+phaseGoal: "Preencher o corpo de cada épico — arquitetura, escopo, critérios de aceitação BDD, comandos de validação, contratos de API, padrões compartilhados, referências de cobertura e estruturas de arquivos."
+phaseCharacter: "o validador pontua por épico; a avaliação do gate é por épico tocado (todos os tocados precisam passar)."
+
+fields:
+  - field: epic.architecture
+    description: "Decisões de arquitetura em nível de épico, refinando a arquitetura em nível de spec para o escopo deste épico."
+    interview_hooks:
+      - "Como este épico se encaixa na arquitetura mais ampla?"
+      - "O que há de especial no fluxo de dados / componentes deste épico?"
+    na_when: "o épico é trivial (por exemplo, um épico de tipos compartilhados sem lógica)"
+
+  - field: epic.scope.inScope
+    description: "Itens dentro do escopo em nível de épico. Vinculam os tickets à fatia deste épico dentro da spec e evitam desvio de tickets durante a expansão. O ScopeSchema exige >= 3 entradas."
+    interview_hooks:
+      - "O que ESTE épico possui que nenhum outro épico possui?"
+    na_when: "nunca (campo obrigatório uma vez que epic.scope esteja preenchido)"
+
+  - field: epic.scope.outOfScope
+    description: "Não-objetivos explícitos no nível do épico. Evita que tickets invadam épicos adjacentes."
+    interview_hooks:
+      - "O que um colaborador poderia esperar que este épico fizesse, mas ele não faz?"
+    na_when: "nunca (campo obrigatório uma vez que epic.scope esteja preenchido)"
+
+  - field: epic.scope.assumptions
+    description: "Suposições específicas do épico que valem a pena expor para questionamento durante o planejamento."
+    na_when: "o épico não carrega suposições de escopo próprias — forneça uma justificativa com >=20 caracteres"
+
+  - field: epic.scope.externalDependencies
+    description: "Dependências externas específicas do épico (bibliotecas, saídas de épicos irmãos). Definem o risco de integração deste épico."
+    na_when: "o épico não tem dependências externas próprias — forneça uma justificativa com >=20 caracteres"
+
+  - field: epic.goals
+    description: "Objetivos específicos do épico com critérios de sucesso. A maioria dos épicos herda de spec.goals via goalsCovered; declare os seus próprios quando este épico possuir um objetivo que a spec não enumera. O `id` é atribuído automaticamente internamente — nunca o passe."
+    na_when: "os objetivos do épico já estão totalmente capturados por spec.goals + goalsCovered — forneça uma justificativa com >=20 caracteres"
+
+  - field: epic.acceptanceCriteria
+    description: "Critérios de aceitação BDD em nível de épico que definem quando este épico está completo. O `id` é atribuído automaticamente internamente — nunca o passe. O `order` é opcional: preenchido automaticamente pela posição se omitido, ou defina-o para controlar a ordenação."
+    interview_hooks:
+      - "Como verificamos este épico de ponta a ponta?"
+    na_when: "nunca (campo crítico)"
+
+  - field: epic.validationCommands
+    description: "Comandos que validam este épico — typecheck, lint, test, build, etc."
+    interview_hooks:
+      - "Quais comandos comprovam que este épico está saudável?"
+    na_when: "validação tratada apenas no nível da spec"
+
+  - field: epic.apiContracts
+    description: "Contratos de API públicos que este épico expõe. 5 valores de type."
+    na_when: "o épico não expõe API (apenas interno)"
+
+  - field: epic.sharedPatterns
+    description: "Padrões reutilizáveis dentro do épico. Cada padrão carrega 5 slots de herança opcionais: codeStandards (errorHandling/naming/language + chaves de string livres), commonImports (string[]), returnTypes (Record<string,string>), additionalImports (string[]), commonFiles (Record<string,string>). Mescla com spec.sharedPatterns pelo nome — as sobrescritas do épico vencem em caso de nome coincidente. O `id` é atribuído automaticamente internamente — nunca o passe."
+    interview_hooks:
+      - "Quais padrões de spec.sharedPatterns este épico sobrescreve ou estende?"
+      - "Quais convenções locais do épico todos os tickets deste épico compartilham?"
+    na_when: "o épico não adiciona nada além de spec.sharedPatterns — forneça uma justificativa com >=20 caracteres"
+
+  - field: epic.requirementsCovered
+    description: "Quais spec.requirements este épico cobre. D10 — rastreamento de cobertura transversal."
+    na_when: "o épico é apenas fundacional/andaime (scaffolding)"
+
+  - field: epic.nfrsCovered
+    description: "Quais NFRs este épico atende."
+    na_when: "nenhum NFR se aplica a este épico"
+
+  - field: epic.goalsCovered
+    description: "Quais spec.goals este épico avança."
+    na_when: "o épico não avança diretamente nenhum objetivo de topo"
+
+  - field: epic.category
+    description: "Categorização flexível para relatórios."
+
+  - field: epic.fileStructures
+    description: "Estrutura de arquivos por épico. Refina spec.folderStructures com arquivos específicos do épico. M4.17. O `id` é atribuído automaticamente internamente — nunca o passe."
+    na_when: "o épico não possui código novo (por exemplo, um épico apenas de documentação)"
