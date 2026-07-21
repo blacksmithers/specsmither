@@ -46,7 +46,9 @@ from specsmither.lifecycle.operations_registry import (
 )
 from specsmither.lifecycle.ports import SpecDependencyEdge
 from specsmither.lifecycle.prechecks import (
+    BatchValidationCycle,
     Denied,
+    batch_deduped_denial,
     blueprint_epic_ratio,
     blueprint_link_refs_exist,
     cascade_rules,
@@ -57,14 +59,15 @@ from specsmither.lifecycle.prechecks import (
     enum_field_guards,
     field_shape_soft_deny,
     operation_allowed,
+    run_dependencies_batch,
     schema_validate,
     spec_status_check,
-    validate_dependencies_batch,
 )
 from specsmither.lifecycle.prechecks.cross_val_file_redirect import cross_val_file_redirect
 from specsmither.lifecycle.prechecks.strip_field_declarations import (
     strip_agent_wire_field_declarations,
 )
+from specsmither.lifecycle.verbs.cycle_guidance import build_cycle_detected_denial
 from specsmither.lifecycle.verbs.justify_support import JustifyResolution, resolve_justify
 from specsmither.lifecycle.verbs.support import (
     SessionNotFoundError,
@@ -230,9 +233,23 @@ def action_planning_session(
             )
             for edge in (op_payload or {}).get("dependencies", [])
         ]
-        batch = validate_dependencies_batch(incoming, spec_full.dependencies)
-        if isinstance(batch, Denied):
-            return _denied(ports, session, operation, op_payload, batch, user_id, lifecycle_config, validator_config)
+        batch_result = run_dependencies_batch(incoming, spec_full.dependencies)
+        if isinstance(batch_result, BatchValidationCycle):
+            # Enrich the bare "remove the offending edge" deny with the per-edge evidence
+            # (file-backing + epic/order) + a per-edge recovery plan. The analyzer reads the
+            # projected spec's file/order model; create_dependencies only ADDS edges, so the
+            # pre-mutation spec == the projected spec for this analysis. The intra-batch-vs-
+            # persisted origin tag is computed lifecycle-side from the persisted graph.
+            spec_dict = spec_full.spec.model_dump(by_alias=True, exclude_none=True)
+            cycle_denial = build_cycle_detected_denial(
+                batch_result,
+                spec_dict,
+                spec_full.dependencies,
+                resolve_language(lifecycle_config),
+            )
+            return _denied(ports, session, operation, op_payload, cycle_denial, user_id, lifecycle_config, validator_config)
+        if not batch_result.to_persist:
+            return _denied(ports, session, operation, op_payload, batch_deduped_denial(batch_result), user_id, lifecycle_config, validator_config)
 
     # justify / unjustify — resolve the target entity + validate the scope/reason, producing
     # the FULL merged fieldDeclarations map. The resolution threads into the projection, the

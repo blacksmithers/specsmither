@@ -131,4 +131,77 @@ TEXT_EN: dict[str, str] = {
         '`fieldDeclarations: { "{field}": '
         '{ "value": "N/A", "reason": "<≥20 chars>" } }`.'
     ),
+    # -- cycle-resolution guidance (the cycle_detected deny) -------------------
+    "cycle.deny.frame": (
+        "Adding these dependency edges would create {cycleCount} dependency cycle(s) — "
+        "the whole batch was denied and nothing from it was persisted. This is INDICATIVE "
+        "evidence, not a verdict: `get_ticket` the tickets in each loop and decide which "
+        "ONE direction genuinely must run first. Do NOT cut blindly — a dependency can be "
+        "legitimate for pure ordering even without a shared file.\n\n"
+        "{cycleAnalysis}\n\n"
+        "Grounding rule: an edge `X requires Y` is file-justified when X CONSUMES "
+        "(references/modifies) a file Y CREATES; otherwise lean on the epic/ticket order. "
+        "Keep the grounded direction and drop the spurious one — RESUBMIT "
+        "`create_dependencies` without it when it is a new batch edge (`[in this batch]`), "
+        "or `delete_dependencies` it when it is `[already persisted]`. Never keep a "
+        "direction with no file or ordering basis."
+    ),
+    "cycle.shape.one-file-backed": "one direction is file-backed",
+    "cycle.shape.none-file-backed": "no file backs either direction — an invented ordering",
+    "cycle.shape.all-file-backed": "BOTH directions file-backed — a circular FILE dependency",
+    "cycle.origin.intra-batch": "[in this batch]",
+    "cycle.origin.persisted": "[already persisted]",
+    "cycle.hint.forward": "the evidence favors keeping this edge",
+    "cycle.hint.reverse": (
+        "the evidence favors the OPPOSITE direction — likely the spurious edge"
+    ),
+    "cycle.hint.ambiguous": "no distinguishing signal",
+    "cycle.scope.same-epic": "same epic",
+    "cycle.scope.cross-epic": "cross-epic",
+    "cycle.order.detailed": (
+        "{scope} ({orderBasis} order: {fromId}={fromOrder}, {toId}={toOrder})"
+    ),
+    "cycle.file.backed": "FILE-BACKED — {fromId} consumes {files}, which {toId} creates",
+    "cycle.file.none": "no file backs it",
+    "cycle.edge.evidence": (
+        "{fromId} → {toId} ({fromId} requires {toId}): {fileClause}; {orderClause} — "
+        "{hintClause}. {originTag}"
+    ),
+    "cycle.getTicket": "`get_ticket {ids}`",
+    "cycle.block.header": "Cycle {n}: {nodeSequence}  ({shapeLabel})",
+    "cycle.block.edge": "  • {evidence}",
+    "cycle.block.recovery": "  → Recovery: {recovery}",
+    "cycle.overflow": "…and {count} more cycle(s).",
+    "cycle.recovery.all-file-backed": (
+        "{getTicket}, then reshape the file assignments with `update_ticket` — each ticket "
+        "consumes a file the other creates, so this is a contradictory FILE dependency, not "
+        "a spurious edge. Do NOT drop an edge (omitting one leaves a ticket consuming a file "
+        "with no creator); the file fix rolls back to ticket_expansion."
+    ),
+    "cycle.recovery.spuriousPersisted": (
+        "{getTicket} to confirm, then `delete_dependencies` the spurious edge {label} — it "
+        "is already persisted and closes the loop through the existing graph. Keep the "
+        "grounded direction."
+    ),
+    "cycle.recovery.spuriousIntraBatch": (
+        "{getTicket} to confirm, then RESUBMIT `create_dependencies` OMITTING the spurious "
+        "edge {label}. It is in THIS batch, so nothing was persisted — `delete_dependencies` "
+        "would be a no-op here. Keep the grounded direction."
+    ),
+    "cycle.recovery.ambiguous": (
+        "{getTicket} and decide from the tickets' content: the loop shares no justifying "
+        "file{orderNote}, so keep at most ONE direction if a real execution ordering exists "
+        "(or none if the tickets are independent), then {mechanism}. Do NOT keep a direction "
+        "with no basis, and do NOT cut blindly."
+    ),
+    "cycle.recovery.mechanism.persisted": (
+        "drop the direction you judge spurious — `delete_dependencies` it if it is already "
+        "persisted, or OMIT it on resubmit if it is a new batch edge"
+    ),
+    "cycle.recovery.mechanism.intra-batch": (
+        "RESUBMIT `create_dependencies` OMITTING the direction(s) you drop (nothing was "
+        "persisted, so `delete_dependencies` would be a no-op)"
+    ),
+    "cycle.recovery.orderNote": " and no decisive order signal",
 }
+

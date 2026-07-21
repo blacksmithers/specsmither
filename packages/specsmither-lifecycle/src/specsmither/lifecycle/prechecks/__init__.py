@@ -38,6 +38,7 @@ from specsmither.lifecycle.prechecks.dependencies_batch import (
     BatchValidationOk,
     BatchValidationResult,
     DetectedCycle,
+    batch_deduped_denial,
     run_dependencies_batch,
     validate_dependencies_batch,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "DetectedCycle",
     "PrecheckResult",
     "SpecStatusVerb",
+    "batch_deduped_denial",
     "blueprint_epic_ratio",
     "blueprint_link_refs_exist",
     "cascade_rules",

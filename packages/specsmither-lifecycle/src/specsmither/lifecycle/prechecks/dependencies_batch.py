@@ -39,6 +39,7 @@ __all__ = [
     "BatchValidationOk",
     "BatchValidationResult",
     "DetectedCycle",
+    "batch_deduped_denial",
     "run_dependencies_batch",
     "validate_dependencies_batch",
 ]
@@ -183,6 +184,22 @@ def _format_cycle(cycle: DetectedCycle) -> str:
     return " -> ".join(nodes)
 
 
+def batch_deduped_denial(result: BatchValidationOk) -> Denied:
+    """The ``batch_fully_deduped`` deny — every submitted edge was a duplicate."""
+
+    return Denied(
+        code="batch_fully_deduped",
+        message=(
+            "Every submitted dependency is a duplicate (within the batch or "
+            "already persisted); nothing new to add."
+        ),
+        context={
+            "dropped_intra_batch": len(result.dropped_intra_batch),
+            "dropped_persisted": len(result.dropped_persisted),
+        },
+    )
+
+
 def validate_dependencies_batch(
     incoming: Sequence[SpecDependencyEdge],
     existing: Sequence[SpecDependencyEdge],
@@ -193,7 +210,8 @@ def validate_dependencies_batch(
     ``cycle_detected`` (with formatted cycle paths as ``blockers``) takes
     precedence; otherwise ``batch_fully_deduped`` when nothing survives dedup;
     otherwise accepted. The L4 pipeline calls :func:`run_dependencies_batch`
-    directly when it also needs the surviving ``to_persist`` edges.
+    directly — it also needs the surviving ``to_persist`` edges, and it enriches
+    the ``cycle_detected`` deny with the per-edge evidence + recovery packet.
     """
 
     result = run_dependencies_batch(incoming, existing, tickets)
@@ -207,16 +225,6 @@ def validate_dependencies_batch(
         )
 
     if not result.to_persist:
-        return Denied(
-            code="batch_fully_deduped",
-            message=(
-                "Every submitted dependency is a duplicate (within the batch or "
-                "already persisted); nothing new to add."
-            ),
-            context={
-                "dropped_intra_batch": len(result.dropped_intra_batch),
-                "dropped_persisted": len(result.dropped_persisted),
-            },
-        )
+        return batch_deduped_denial(result)
 
     return Accepted()
