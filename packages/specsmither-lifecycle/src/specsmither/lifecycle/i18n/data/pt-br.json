@@ -46,7 +46,7 @@
     "field.render": "Para **`{field}`** {requiredLabel}:\n- Shape: `{shape}`\n- {description}\n- Ganchos de entrevista:\n  {hooks}\n- {naClause}\n{minCountClause}\n{tierClause}\n\nExemplos:\n{examples}\n",
     "field.naNotEligible": "Não elegível a N/A — deve ser preenchido.",
     "field.naWhen": " quando {naWhen}",
-    "field.naEligible": "Elegível a N/A{when}: declare via `update_*` com `fieldDeclarations: { \"{field}\": { \"value\": \"N/A\", \"reason\": \"<≥20 chars>\" } }`.",
+    "field.naEligible": "Elegível a N/A{when}: declare como N/A com o op `justify` — scope `{scope}`, com um motivo de ≥20 caracteres (adicione o `id` da entidade para um épico ou ticket).",
 
     "cycle.deny.frame": "Adicionar essas arestas de dependência criaria {cycleCount} ciclo(s) de dependência — o batch inteiro foi negado e nada dele foi persistido. Esta é evidência INDICATIVA, não um veredito: use `get_ticket` nos tickets de cada laço e decida qual UMA direção genuinamente deve rodar primeiro. NÃO corte às cegas — uma dependência pode ser legítima para ordenação pura mesmo sem um arquivo compartilhado.\n\n{cycleAnalysis}\n\nRegra de fundamentação: uma aresta `X requer Y` é justificada por arquivo quando X CONSOME (referencia/modifica) um arquivo que Y CRIA; caso contrário, apoie-se na ordem de épico/ticket. Mantenha a direção fundamentada e descarte a espúria — RE-ENVIE `create_dependencies` sem ela quando for uma aresta nova do batch (`[neste batch]`), ou use `delete_dependencies` quando for `[já persistido]`. Nunca mantenha uma direção sem base em arquivo ou ordenação.",
     "cycle.shape.one-file-backed": "uma direção é respaldada por arquivo",

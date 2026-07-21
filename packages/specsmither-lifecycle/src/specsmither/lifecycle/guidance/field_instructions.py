@@ -258,12 +258,19 @@ def _bullet(
 
 
 def _na_clause(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:
-    """The field-level N/A instruction (``naClause``)."""
+    """The field-level N/A instruction (``naClause``).
+
+    Post-justify, N/A is declared with the dedicated ``justify`` op (a late
+    ``update_*`` carrying only ``fieldDeclarations`` is stripped, then rolls back),
+    so the clause names the ``justify`` op + the bare N/A scope (the field id with its
+    ``spec.`` / ``epic.`` / ``ticket.`` prefix dropped — the scope ``justify`` validates).
+    """
 
     if not field.na_eligible:
         return text(language, "field.naNotEligible")
     when = t(language, "field.naWhen", {"naWhen": field.na_when}) if field.na_when else ""
-    return t(language, "field.naEligible", {"when": when, "field": field.field})
+    scope = field.field.split(".", 1)[1] if "." in field.field else field.field
+    return t(language, "field.naEligible", {"when": when, "scope": scope})
 
 
 def _render_field(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:

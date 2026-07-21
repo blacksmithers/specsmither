@@ -45,6 +45,7 @@ from crucible.models import (
     BlueprintReference,
     DependencyLink,
     Epic,
+    FieldDeclaration,
     Specification,
     Ticket,
 )
@@ -273,8 +274,19 @@ MutationOp = (
 
 
 def _assign(model: BaseModel, fields: Mapping[str, Any]) -> None:
-    """Patch a model's attributes in place (snake_case keys; ``extra="allow"``)."""
+    """Patch a model's attributes in place (snake_case keys; ``extra="allow"``).
+
+    ``field_declarations`` arrives as a plain ``{scope: {value, reason}}`` wire map
+    (from justify); coerce the inner dicts to :class:`FieldDeclaration` so the assigned
+    attribute matches its declared type and a later ``model_dump`` serializes cleanly
+    (a raw dict on a ``dict[str, FieldDeclaration]`` field trips a pydantic warning).
+    """
     for key, value in fields.items():
+        if key == "field_declarations" and isinstance(value, Mapping):
+            value = {
+                scope: (decl if isinstance(decl, FieldDeclaration) else FieldDeclaration.model_validate(decl))
+                for scope, decl in value.items()
+            }
         setattr(model, key, value)
 
 

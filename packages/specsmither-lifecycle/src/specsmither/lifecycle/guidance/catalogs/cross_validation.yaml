@@ -53,7 +53,7 @@ coverage_invariant: |
   Blueprint coverage is gated earlier (in ticket_decomposition) — it is no longer a
   cross-validation check, though blueprints are still linked to tickets here.
 
-  NA mechanism: for `orphan-reference` (unjustified root) and `island-ticket` — justify via ticket.fieldDeclarations.dependencies.
+  NA mechanism: for `orphan-reference` (unjustified root) and `island-ticket` — declare the ticket's `dependencies` scope N/A with the `justify` op.
   `broken-reference` is NEVER NA-eligible — always an error (create the missing ticket or remove the reference).
 
 handover_summary: "Cross-validation passed: zero findings across the 10 cross-checks + zero duplicate-order findings. Spec is fully coherent. **Terminal handover** — approval here closes the spec to status `ready`; feedback loops back."
@@ -76,9 +76,9 @@ gate_failed_body: |
   **Approach:**
   1. **Per ticket, ask:** which blueprints describe artifacts this ticket needs to follow? Link them with `link_blueprint_to_tickets`. Poll `get_planning_status` for the **blueprint-coverage scoreboard** — it flags every blueprint still below the minimum link count, how many more tickets each needs, and the real blueprintId/ticketId roster to address. Link those ids directly; never probe with placeholder ids.
   2. **Per ticket, ask:** which other tickets must be done first? Declare dependencies with `create_dependencies` — each edge is a `requires` edge (fromTicketId depends on toTicketId). To express "this ticket blocks that one", reverse the edge.
-  3. **Justify intentional dependency gaps** via `fieldDeclarations.dependencies = { value: 'N/A', reason: '<≥20 chars>' }` (foundational/standalone). NOT for `broken-reference` — that always errors.
+  3. **Justify intentional dependency gaps** with the `justify` op (scope `dependencies`, reason `<≥20 chars>`) for foundational/standalone tickets. NOT for `broken-reference` — that always errors.
   4. **When relational ambiguity needs the human's call**, complete the phase (`complete_planning_session`) and raise the question in your handover — the human resolves it on review.
-  5. **Avoid body changes here.** An `update_ticket`/`update_epic`/`update_spec` that changes body fields rolls back to its native phase. Allowed here: relational ops (dependencies, blueprint links) and `fieldDeclarations`-only N/A declarations (exempt from rollback).
+  5. **Avoid body changes here.** An `update_ticket`/`update_epic`/`update_spec` that changes body fields rolls back to its native phase. Allowed here: relational ops (dependencies, blueprint links) and `justify`/`unjustify` N/A declarations (native to every phase, never a rollback).
 
   **CPS gate criteria** — the 10 cross-checks must pass before terminal handover.
 

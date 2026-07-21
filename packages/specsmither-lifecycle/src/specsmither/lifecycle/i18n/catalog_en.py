@@ -127,9 +127,8 @@ TEXT_EN: dict[str, str] = {
     "field.naNotEligible": "Not N/A-eligible — must be filled.",
     "field.naWhen": " when {naWhen}",
     "field.naEligible": (
-        'N/A-eligible{when}: declare via `update_*` with '
-        '`fieldDeclarations: { "{field}": '
-        '{ "value": "N/A", "reason": "<≥20 chars>" } }`.'
+        "N/A-eligible{when}: declare it N/A with the `justify` op — scope `{scope}`, "
+        "with a reason of ≥20 characters (add the entity `id` for an epic or ticket)."
     ),
     # -- cycle-resolution guidance (the cycle_detected deny) -------------------
     "cycle.deny.frame": (
