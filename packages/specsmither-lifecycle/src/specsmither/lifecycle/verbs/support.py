@@ -1,6 +1,6 @@
 """Shared verb support — :class:`VerbResult`, the verb errors, and pure helpers.
 
-The four planning verbs (``start`` / ``action`` / ``complete`` / ``inspect``) all
+The three planning verbs (``start`` / ``action`` / ``complete``) all
 return a :class:`VerbResult` (a composed response + the optional :class:`WritePlan` to
 persist). The three error classes are the *throw* path the verbs use when there is no
 session to scope a guidance denial to (a missing spec / session, or an SPS precondition

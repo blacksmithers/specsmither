@@ -7,8 +7,9 @@ event to its (pure) verb, then, if the verb built a :class:`WritePlan` and a
 single transaction (the verb's reads + the plan's writes share one ``Session`` →
 one ``BEGIN IMMEDIATE``).
 
-The four agent-facing verbs (``start`` / ``action`` / ``complete`` / ``inspect``) are
-the dispatch union; the three handover verbs are deliberately NOT here (they are
+The three agent-facing verbs (``start`` / ``action`` / ``complete``) are the dispatch
+union — the read-only status poll is the ``get_planning_status`` operation of ``action``,
+not a separate verb; the three handover verbs are deliberately NOT here (they are
 webapp/CLI-called entrypoints built separately, where
 ``approveHandover`` / ``rejectHandover*`` are not part of ``handle``).
 
@@ -25,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from specsmither.lifecycle.verbs.action import action_planning_session
 from specsmither.lifecycle.verbs.complete import complete_planning_session
-from specsmither.lifecycle.verbs.inspect import inspect_planning_session
 from specsmither.lifecycle.verbs.start import start_planning_session
 from specsmither.lifecycle.verbs.support import VerbResult
 
@@ -42,8 +42,8 @@ __all__ = [
     "create_lifecycle",
 ]
 
-#: The four agent-facing verb names the dispatch union routes.
-VerbName = Literal["start", "action", "complete", "inspect"]
+#: The three agent-facing verb names the dispatch union routes.
+VerbName = Literal["start", "action", "complete"]
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,8 @@ class LifecycleEvent:
 
     ``verb`` selects the agent-facing verb; ``payload`` is that verb's wire payload
     (``{specId,…}`` for ``start``; ``{sessionId, operation, payload?, actor?,…}`` for
-    ``action``; ``{sessionId,…}`` for ``complete`` / ``inspect``).
+    ``action``; ``{sessionId,…}`` for ``complete``). The read-only status poll is the
+    ``get_planning_status`` operation of ``action``, not a separate verb.
     """
 
     verb: VerbName
@@ -95,6 +96,4 @@ def _dispatch(event: LifecycleEvent, ports: LifecyclePorts) -> VerbResult:
         return action_planning_session(event.payload, ports)
     if event.verb == "complete":
         return complete_planning_session(event.payload, ports)
-    if event.verb == "inspect":
-        return inspect_planning_session(event.payload, ports)
     raise ValueError(f"Unknown lifecycle verb: {event.verb!r}")

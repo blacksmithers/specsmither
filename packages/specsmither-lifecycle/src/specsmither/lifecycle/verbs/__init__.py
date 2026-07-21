@@ -1,5 +1,4 @@
-"""The four agent-facing planning verbs (``start`` / ``action`` / ``complete`` /
-``inspect``).
+"""The three agent-facing planning verbs (``start`` / ``action`` / ``complete``).
 
 Each verb is a **pure** function ``(payload, ports) -> VerbResult`` — it reads via the
 :class:`~specsmither.lifecycle.ports.LifecyclePorts` seam, runs the deterministic
