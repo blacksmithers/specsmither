@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "specsmither-lifecycle"
-version = "0.1.0"
+version = "0.2.0"
 description = "The PURE planning-lifecycle core of SpecSmither — the crucible-gated verb surface (start/action/complete/inspect + handovers), the in-memory operations projector, the WritePlan data contract, and the domain records. No SQLAlchemy, no Textual, no MCP."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,7 @@ classifiers = [
 ]
 # The PURE core deps ONLY — the whole point of the split. NO sqlalchemy/textual/mcp.
 dependencies = [
-    "crucible-forge>=0.2.0",
+    "crucible-forge>=0.3.0",
     "pydantic>=2.6",
     "python-ulid>=2.0",
     "pyyaml>=6.0",

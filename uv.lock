@@ -188,16 +188,16 @@ wheels = [
 
 [[package]]
 name = "crucible-forge"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/ee/b14ee591216e93a35dec06cd8062465bcebb5445bfc7c7e53be50601384c/crucible_forge-0.2.0.tar.gz", hash = "sha256:ed06e9c32b47205d88b0049d6d3e70015e42a0fc586b160fb2bd8d8bc0439449", size = 70260, upload-time = "2026-07-13T17:30:21.441Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/56/92a987128990cbc59723d7e5d52c6cedde6d38c36e1e949d6a0791d2f55e/crucible_forge-0.3.0.tar.gz", hash = "sha256:5c70f3694a4ed0c8b228f5524ac6c8104757054fa83f3a35017117de00de077a", size = 86703, upload-time = "2026-07-21T09:13:53.294Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/7f/298c00b8f36db0066fb1a48afc39373d0d01e727182b52e3e22364d8db4e/crucible_forge-0.2.0-py3-none-any.whl", hash = "sha256:06398d19001f655bcf93e9a2be61ddc890a2318dad3b9d2623994862988fc152", size = 108829, upload-time = "2026-07-13T17:30:20.01Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/b5/a2af6cc14a8945d63aee0d8bfb2a3999678da0513ba7ea719732b561f89b/crucible_forge-0.3.0-py3-none-any.whl", hash = "sha256:6913eb631e4cec489ad74f7a3dd83c7517e9d5436f53a8ae317ce3b751d90883", size = 124482, upload-time = "2026-07-21T09:13:52.172Z" },
 ]
 
 [[package]]
@@ -1265,7 +1265,7 @@ wheels = [
 
 [[package]]
 name = "specsmither"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "crucible-forge" },
@@ -1290,7 +1290,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", specifier = ">=0.2.0" },
+    { name = "crucible-forge", specifier = ">=0.3.0" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },
@@ -1312,7 +1312,7 @@ dev = [
 
 [[package]]
 name = "specsmither-lifecycle"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/specsmither-lifecycle" }
 dependencies = [
     { name = "crucible-forge" },
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", specifier = ">=0.2.0" },
+    { name = "crucible-forge", specifier = ">=0.3.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },

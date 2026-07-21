@@ -4,6 +4,32 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.0
+
+Tracks the `crucible-forge` 0.3.0 validation engine and adds a catalog-parity
+contract so any tool surface can be tested against the deny-gate it must conform to.
+
+### Added
+
+- **`PLANNING_OPERATION_CONTRACT`** — a plain-data view of the per-operation
+  deny-gate (`op → required payload fields`, plus the required fields of a payload's
+  array-of-objects field). Derived directly from the payload models, so it cannot
+  drift from what the gate enforces.
+- **`check_planning_catalog_parity()`** + **`catalog_branches_from_oneof()`** — a
+  reusable guard that asserts a public tool catalog's `action_planning_session`
+  `oneOf` advertises exactly the shapes the gate accepts. A catalog that offers, say,
+  `epicId` where the gate requires `id`, or `{ticketId, dependsOnId}` where it
+  requires `{fromTicketId, toTicketId}`, is flagged before it can deny a
+  spec-following agent at runtime.
+
+### Changed
+
+- **Requires `crucible-forge >= 0.3.0`.** The cross-validation guidance now reflects
+  the engine's current registry: ten checks run in the `cross_validation` phase,
+  file coordination is covered by `file-provenance` and `concurrent-modification`,
+  and blueprint coverage is gated earlier (in `ticket_decomposition`). The
+  `create_dependencies` batch cap is stated as 5000 edges per call.
+
 ## 0.1.0
 
 First release — the pure planning-lifecycle core, extracted from the `specsmither`

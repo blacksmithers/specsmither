@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "specsmither"
-version = "0.2.0"
+version = "0.3.0"
 description = "Open-source, local-first, NO-LLM Control System for Agentic AI Implementation — Specification → Epic → Ticket → DAG over a single SQLite file."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,8 +25,8 @@ dependencies = [
     # dist (shares the ``specsmither`` PEP 420 namespace). Resolved from the workspace
     # in dev (see [tool.uv.sources]); from PyPI (this floor) for a published build —
     # the ``[tool.uv.sources]`` workspace override does not reach the published metadata.
-    "specsmither-lifecycle>=0.1.0",
-    "crucible-forge>=0.2.0",
+    "specsmither-lifecycle>=0.2.0",
+    "crucible-forge>=0.3.0",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
     "python-ulid>=2.0",
@@ -81,7 +81,7 @@ dev = [
 packages = ["src/specsmither"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/specsmither", "README.md", "LICENSE"]
+include = ["src/specsmither", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 100
