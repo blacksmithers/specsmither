@@ -4,7 +4,7 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.3.0
+## 0.4.0
 
 Adds a guidance internationalization layer and two structured recovery plans for the
 cross-validation denials, and tracks the `crucible-forge` 0.4.0 engine.
@@ -37,6 +37,17 @@ cross-validation denials, and tracks the `crucible-forge` 0.4.0 engine.
   operation and the bare N/A scope, replacing the retired `update_*`-with-
   `fieldDeclarations` path.
 - **`planning-lifecycle` config schema version 3** — adds `guidance.language`.
+
+### Fixed
+
+- **`human_feedback_received` status poll** now carries a recommended move (the phase's
+  first native op, "apply the human's feedback") instead of an empty list.
+
+### Removed
+
+- **`inspect_planning_session`** — an unreachable verb no surface dispatched. The
+  read-only status report is the `get_planning_status` operation of
+  `action_planning_session`, which is fully retained.
 
 ## 0.2.0
 
