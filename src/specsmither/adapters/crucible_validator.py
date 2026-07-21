@@ -1,7 +1,6 @@
-"""Crucible-backed :class:`~specsmither.lifecycle.ports.Validator` (work item #5).
+"""Crucible-backed :class:`~specsmither.lifecycle.ports.Validator`.
 
-Faithful port of ``lifecycle/adapters/validator-adapter.ts`` (A1 §3.2). This is
-the one *coupled* seam between the pure planning lifecycle and crucible — the
+The one *coupled* seam between the pure planning lifecycle and crucible — the
 deterministic OpenSpec validation engine. The lifecycle only ever reads the flat
 :class:`~specsmither.lifecycle.ports.ValidatorOutput` contract; this adapter maps
 crucible's richer four-layer result down to it.
@@ -18,31 +17,33 @@ the full id list; everything else — including ``ticket_decomposition``, which 
 spec-wide — passes ``None``), and calls :func:`crucible.validate` for the
 ``structural`` / ``scoring`` / ``guidance`` layers. ``gate_result`` / ``local_score``
 come from the active ``scoring`` layer (a *skipped* or *absent* scoring layer maps
-to ``'fail'`` / ``0.0``, mirroring the TS ``scoring && !scoring.skipped`` guard);
-the per-entity scores route to ``per_epic_score`` on ``epic_expansion`` and
-``per_ticket_score`` on ``ticket_expansion`` (``{}`` on every other phase); and
-``findings`` flattens crucible's structural findings + per-entity guidance entries
-into the lifecycle's :class:`~specsmither.lifecycle.ports.ValidatorFinding` list.
+to ``'fail'`` / ``0.0``); the per-entity scores route to ``per_epic_score`` on
+``epic_expansion`` and ``per_ticket_score`` on ``ticket_expansion`` (``{}`` on
+every other phase); and ``findings`` flattens crucible's structural findings +
+per-entity guidance entries into the lifecycle's
+:class:`~specsmither.lifecycle.ports.ValidatorFinding` list.
 
-Faithful-port notes
---------------------
+Notes
+-----
 
-* crucible's ``validate`` is **synchronous** (the engine has no async I/O) — the
-  TS ``Promise`` wrapper drops, exactly as the rest of the SpecSmither seam went
-  sync.
+* crucible's ``validate`` is **synchronous** (the engine has no async I/O), so the
+  whole seam is sync.
 * :data:`_VALIDATOR_OP_TO_PATH` keys are crucible's ``OperationName`` vocabulary
-  (``add_dependencies`` / ``remove_dependency`` / ``link_blueprint`` …), *not* the
-  lifecycle's 15-op planning names — cross-validation guidance entries carry the
-  validator-side op names, so the table is ported verbatim from the TS adapter.
+  (``create_dependencies`` / ``delete_dependencies`` / ``link_blueprint_to_tickets``
+  …), *not* the lifecycle's 15-op planning names — cross-validation guidance entries
+  carry the validator-side op names, which this table translates into locator paths.
 * Every emitted finding carries ``severity='finding'`` (advisory); crucible's own
-  ``error``/``warning`` severities are not surfaced — the TS adapter hardcodes
-  ``'finding'`` because the gate, not the finding, is the hard signal.
+  ``error``/``warning`` severities are not surfaced, because the gate, not the
+  finding, is the hard signal.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from crucible import compute_grep_candidates
 from crucible import validate as crucible_validate
 from crucible.types import (
     GuidanceCrossValidationEntry,
@@ -58,11 +59,32 @@ from specsmither.lifecycle.ports import SpecFull, ValidatorFinding, ValidatorOut
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-__all__ = ["CrucibleValidatorAdapter"]
+__all__ = ["CrucibleValidatorAdapter", "FileExistenceProber", "filesystem_file_prober"]
+
+#: Grep-evidence probe: given the candidate paths a spec needs real-repo evidence
+#: for (:func:`crucible.compute_grep_candidates`), return the subset that actually
+#: exists. Injected into :class:`CrucibleValidatorAdapter`; when absent the engine
+#: falls back to strict spec-internal existence (brownfield modifies are flagged).
+FileExistenceProber = Callable[[Sequence[str]], Iterable[str]]
+
+
+def filesystem_file_prober(root: Path) -> FileExistenceProber:
+    """A :data:`FileExistenceProber` rooted at ``root`` (the project working tree).
+
+    Candidate paths are spec-relative; each is resolved against ``root`` and kept
+    when it exists on disk. This is the local-first grep seam: crucible stays
+    filesystem-free and this adapter supplies the real-repo evidence its
+    file-provenance check needs.
+    """
+
+    def _probe(candidates: Sequence[str]) -> list[str]:
+        return [c for c in candidates if (root / c).exists()]
+
+    return _probe
 
 
 # --------------------------------------------------------------------------- #
-# Phase set + op→path table (ported verbatim from validator-adapter.ts)        #
+# Phase set + op→path table                                                    #
 # --------------------------------------------------------------------------- #
 
 #: Phases crucible recognises — the six real phases, excluding the ``planned``
@@ -89,13 +111,13 @@ _VALIDATOR_OP_TO_PATH: dict[str, str] = {
     "create_ticket": "/cross-validation/by-op/create_ticket",
     "update_ticket": "/cross-validation/by-op/update_ticket",
     "delete_ticket": "/cross-validation/by-op/delete_ticket",
-    "add_dependencies": "/cross-validation/by-op/add_dependencies",
-    "remove_dependency": "/cross-validation/by-op/remove_dependency",
+    "create_dependencies": "/cross-validation/by-op/create_dependencies",
+    "delete_dependencies": "/cross-validation/by-op/delete_dependencies",
     "create_blueprint": "/cross-validation/by-op/create_blueprint",
     "update_blueprint": "/cross-validation/by-op/update_blueprint",
     "delete_blueprint": "/cross-validation/by-op/delete_blueprint",
-    "link_blueprint": "/cross-validation/by-op/link_blueprint",
-    "unlink_blueprint": "/cross-validation/by-op/unlink_blueprint",
+    "link_blueprint_to_tickets": "/cross-validation/by-op/link_blueprint_to_tickets",
+    "unlink_blueprint_to_tickets": "/cross-validation/by-op/unlink_blueprint_to_tickets",
 }
 
 
@@ -248,11 +270,21 @@ def _get_active_entity_id(
 class CrucibleValidatorAdapter:
     """Implements :class:`~specsmither.lifecycle.ports.Validator` over crucible.
 
-    Stateless — a single instance is safe to share across the lifecycle. The
-    ``config`` argument is the already-merged effective ``ValidatorConfig`` dict
-    (defaults + project overrides + frozen spec snapshot); this adapter passes it
-    straight through to :func:`crucible.validate`.
+    Effectively stateless (only an optional grep prober is held) — a single
+    instance is safe to share across the lifecycle. The ``config`` argument is the
+    already-merged effective ``ValidatorConfig`` dict (defaults + project overrides
+    + frozen spec snapshot); this adapter passes it straight through to
+    :func:`crucible.validate`.
+
+    ``file_prober`` supplies the real-repo grep evidence (``existingFiles``) the
+    0.3.0 file-provenance check needs: without it, a brownfield ``filesToBeModified``
+    path that no ticket creates is flagged as non-existent. The product entrypoints
+    inject a :func:`filesystem_file_prober` rooted at the project working tree; when
+    absent, the engine falls back to strict spec-internal existence.
     """
+
+    def __init__(self, *, file_prober: FileExistenceProber | None = None) -> None:
+        self._file_prober = file_prober
 
     def validate(
         self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
@@ -279,14 +311,21 @@ class CrucibleValidatorAdapter:
             "activeEntityId": active_entity_id,
             "returns": ["structural", "scoring", "guidance"],
         }
+        # Grep evidence for the file-provenance check. Tri-state: absent → strict
+        # spec-internal existence; present (even empty) → E = existingFiles ∪
+        # filesToBeCreated. Only probe the candidate paths crucible actually needs
+        # evidence for, and only when a prober is wired (the local-first product path).
+        if self._file_prober is not None:
+            candidates = compute_grep_candidates(spec_dict)
+            context["existingFiles"] = list(self._file_prober(candidates))
         result = cast(ValidationResult, crucible_validate(spec_dict, context))
 
         # gate_result is the AUTHORITATIVE per-phase verdict crucible composes
         # across all layers (structural counts for the decomposition phases,
         # the cross-validation layer for cross_validation, scoring-threshold for
         # the rubric phases) — exposed as the top-level ``result.passed``. Reading
-        # only ``scoring.gate_result`` (as the TS adapter did) wrongly fails every
-        # non-scoring phase, making the loop unable to reach ``ready``.
+        # only ``scoring.gate_result`` would wrongly fail every non-scoring phase,
+        # making the loop unable to reach ``ready``.
         # local_score / per-entity scores still come from the active scoring layer
         # (a skipped/absent layer has no rubric score → 0.0).
         scoring = result.scoring

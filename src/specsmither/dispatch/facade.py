@@ -1,10 +1,10 @@
-"""The M7 dispatch facade (work item #12) — the single MCP routing seam.
+"""The dispatch facade — the single MCP routing seam.
 
-A faithful port of ``core/tools.ts`` + ``core/handlers/*`` (recon A8 §4): the **only**
-module allowed to import both the planning :mod:`~specsmither.lifecycle` state machine
-and the :mod:`~specsmither.operations` CRUD/query primitives (the TS M7 §2.1b façade
-rule). The MCP server (L6) talks ONLY to this façade and never reaches into lifecycle
-or operations directly, so the composition / fan-out lives here.
+This is the **only** module allowed to import both the planning
+:mod:`~specsmither.lifecycle` state machine and the :mod:`~specsmither.operations`
+CRUD/query primitives (the façade rule). The MCP server (L6) talks ONLY to this façade
+and never reaches into lifecycle or operations directly, so the composition / fan-out
+lives here.
 
 :class:`Dispatcher` routes a tool name + a wire ``arguments`` mapping to exactly ONE of
 the three content shapes the :mod:`~specsmither.dispatch.envelopes` layer defines:
@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import IntegrityError
 
+from specsmither.adapters.crucible_validator import filesystem_file_prober
 from specsmither.adapters.lifecycle_ports import make_lifecycle_ports
 from specsmither.adapters.lifecycle_runner import run_verb
 from specsmither.dispatch.envelopes import (
@@ -100,8 +101,11 @@ from specsmither.operations.search import search_tickets
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+    from pathlib import Path
 
     from sqlalchemy.orm import Session, sessionmaker
+
+    from specsmither.adapters.crucible_validator import FileExistenceProber
 
 __all__ = [
     "HANDOVER_TOOL_NAMES",
@@ -254,9 +258,11 @@ class Dispatcher:
         session_factory: sessionmaker[Session],
         *,
         clock: Callable[[], datetime] | datetime | None = None,
+        file_prober: FileExistenceProber | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._clock: Callable[[], datetime] | datetime = clock if clock is not None else _utc_now
+        self._file_prober = file_prober
 
     def dispatch(
         self,
@@ -308,7 +314,7 @@ class Dispatcher:
         detail = normalise_response_detail(arguments.get("responseDetail", response_detail))
         payload: dict[str, Any] = {**arguments, "responseDetail": detail}
         event = LifecycleEvent(verb=_PLANNING_VERBS[tool], payload=payload)
-        response = run_verb(self._session_factory, event)
+        response = run_verb(self._session_factory, event, file_prober=self._file_prober)
         return lifecycle_envelope(response)
 
     # ---------------------------------------------------------------------------------- #
@@ -325,7 +331,7 @@ class Dispatcher:
         session_id = _arg(arguments, "sessionId")
         user_id = _arg(arguments, "userId")
         with self._session_factory.begin() as session:
-            ports = make_lifecycle_ports(session)
+            ports = make_lifecycle_ports(session, file_prober=self._file_prober)
             if tool == "approve_handover":
                 outcome: HandoverOutcome = approve_handover(
                     ApproveHandoverPayload(session_id=session_id, user_id=user_id), ports
@@ -344,7 +350,7 @@ class Dispatcher:
                     ports,
                 )
             # The successful handover carries an UN-committed writePlan; commit it inside
-            # this same transaction (mirrors the TS handover runner's explicit persist).
+            # this same transaction via the runner's explicit persist step.
             if isinstance(outcome, HandoverResult) and ports.persist_write_plan is not None:
                 ports.persist_write_plan(outcome.write_plan)
             return outcome
@@ -569,6 +575,16 @@ def make_dispatcher(
     session_factory: sessionmaker[Session],
     *,
     clock: Callable[[], datetime] | datetime | None = None,
+    project_root: Path | None = None,
+    file_prober: FileExistenceProber | None = None,
 ) -> Dispatcher:
-    """Construct a :class:`Dispatcher` over ``session_factory`` (the L6 MCP server seam)."""
-    return Dispatcher(session_factory, clock=clock)
+    """Construct a :class:`Dispatcher` over ``session_factory`` (the L6 MCP server seam).
+
+    ``project_root`` wires the validator's grep evidence: the file-provenance check
+    reads which spec-declared paths already exist in the working tree. When given (and
+    no explicit ``file_prober`` is passed) a :func:`filesystem_file_prober` rooted there
+    is built; with neither, the validator falls back to strict spec-internal existence.
+    """
+    if file_prober is None and project_root is not None:
+        file_prober = filesystem_file_prober(project_root)
+    return Dispatcher(session_factory, clock=clock, file_prober=file_prober)

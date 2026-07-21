@@ -291,10 +291,35 @@ def _direct_gate(factory: sessionmaker[Session], spec_id: str, phase: PlanningPh
 # --------------------------------------------------------------------------------------
 
 
+def _materialize_brownfield(root: Path) -> Path:
+    """Lay down the brownfield files the seed's tickets consume but do not create.
+
+    crucible's file-provenance check treats a modified/referenced/deleted path that no
+    ticket creates as non-existent unless the caller supplies grep evidence. The product
+    probes the project working tree; here we write empty files under *root* so the
+    validator's filesystem prober reports them as existing (created paths are left absent,
+    so ``create-fresh`` stays silent). Returns *root*.
+    """
+    created: set[str] = set()
+    consumed: set[str] = set()
+    for epic in SEED["epics"]:
+        for ticket in epic["tickets"]:
+            created.update(ticket.get("filesToBeCreated", []) or [])
+            for key in ("filesToBeModified", "filesToBeReferenced", "filesToBeDeleted"):
+                consumed.update(ticket.get(key, []) or [])
+    for rel in sorted(consumed - created):
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("", encoding="utf-8")
+    return root
+
+
 def test_planning_loop_reaches_ready_through_the_real_gate(tmp_path: Path) -> None:
     factory = _open(tmp_path)
     spec_id = _seed(factory)
-    dispatcher = make_dispatcher(factory)
+    # The seed models a brownfield spec: its tickets modify files that already exist in the
+    # repo. Supply that working tree so the file-provenance check has grep evidence.
+    dispatcher = make_dispatcher(factory, project_root=_materialize_brownfield(tmp_path / "repo"))
 
     def action(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
         result = dispatcher.dispatch(

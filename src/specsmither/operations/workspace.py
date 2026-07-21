@@ -45,6 +45,7 @@ __all__ = [
     "resolve_context",
     "resolve_db_path",
     "resolve_home",
+    "resolve_workspace_root",
     "write_workspace_config",
 ]
 
@@ -79,6 +80,23 @@ def resolve_db_path(env: Mapping[str, str] | None = None) -> Path:
     if explicit:
         return Path(explicit).expanduser()
     return resolve_home(env) / _DB_FILENAME
+
+
+def resolve_workspace_root(cwd: str | Path | None = None) -> Path:
+    """The project working-tree root — the grep root for validator file evidence.
+
+    Spec file paths (``src/core/index.py`` …) are relative to the project
+    repository root, which is where the ``.specsmither/`` binding lives. Returns the
+    nearest ancestor of *cwd* (default: the current directory) holding a
+    ``.specsmither/`` directory, or *cwd* itself when none is found. The validator
+    adapter probes this root to supply ``existingFiles`` (grep evidence) to crucible.
+    """
+
+    start = (Path(cwd) if cwd is not None else Path.cwd()).resolve()
+    for candidate in (start, *start.parents):
+        if (candidate / _WORKSPACE_DIRNAME).is_dir():
+            return candidate
+    return start
 
 
 @dataclass(frozen=True)
