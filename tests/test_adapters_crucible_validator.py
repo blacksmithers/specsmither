@@ -325,6 +325,20 @@ def test_language_defaults_to_en_and_threads_into_crucible_context(
     assert captured["language"] == "pt-br"
 
 
+def test_existing_files_surfaced_from_the_prober_else_none() -> None:
+    # No prober → strict spec-internal existence → existing_files is None.
+    out = CrucibleValidatorAdapter().validate(
+        _spec_full(), PlanningPhase.CROSS_VALIDATION, _config()
+    )
+    assert out.existing_files is None
+
+    # A prober → the probed subset is surfaced verbatim as the grep evidence the gate used.
+    probed = ["src/base.py"]
+    adapter = CrucibleValidatorAdapter(file_prober=lambda candidates: probed)
+    out2 = adapter.validate(_spec_full(), PlanningPhase.CROSS_VALIDATION, _config())
+    assert out2.existing_files == frozenset(probed)
+
+
 def test_pt_br_language_translates_crucible_guidance_findings() -> None:
     adapter = CrucibleValidatorAdapter()
     en = adapter.validate(_spec_full(), PlanningPhase.EPIC_EXPANSION, _config())

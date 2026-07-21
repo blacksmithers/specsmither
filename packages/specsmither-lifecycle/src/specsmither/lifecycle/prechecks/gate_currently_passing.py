@@ -56,15 +56,17 @@ def _creator_plan_block(spec_full: SpecFull, output: Any, language: str) -> str:
     """The consolidated creator-election plan for a cross_validation file-provenance deny.
 
     Empty unless the gate carries a file-provenance finding AND there is at least one
-    orphan shared file to plan. Uses the strict spec-internal existence model (the
-    grep-scoped variant that excludes real-repo brownfield files rides the CPS grep
-    double-call, not yet wired here) — so the plan is gated on an actual file-provenance
-    finding, keeping it consistent with why the gate failed.
+    orphan shared file to plan. Uses the SAME real-repo grep evidence the gate used
+    (``output.existing_files``, surfaced by the adapter) so the plan's orphan set matches
+    the gate's — a grep-found brownfield file is not an orphan and gets no plan entry.
+    ``None`` (no prober wired) falls back to strict spec-internal existence.
     """
     if not any((f.path or "") in _FILE_PROVENANCE_PATHS for f in output.findings):
         return ""
     spec_dict = spec_full.spec.model_dump(by_alias=True, exclude_none=True)
-    return format_creator_plan(elect_file_creators(spec_dict), language)
+    return format_creator_plan(
+        elect_file_creators(spec_dict, output.existing_files), language
+    )
 
 
 def _entity_scoreboard(

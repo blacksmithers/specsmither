@@ -133,6 +133,10 @@ class ValidatorOutput:
       cross-validation / schema).
     * ``validated_phase`` — the phase actually validated (the late-op rollback
       ``effectivePhase``); the SPS-resume cache is keyed on this.
+    * ``existing_files`` — the real-repo grep evidence the adapter used for the
+      file-provenance check (``existingFiles``), surfaced so a pre-check computing a
+      file-graph plan (the creator-election plan) sees the SAME existence set the gate
+      did. ``None`` when no prober was wired (strict spec-internal existence).
     """
 
     gate_result: Literal["pass", "fail"]
@@ -141,6 +145,7 @@ class ValidatorOutput:
     per_ticket_score: dict[str, float]
     findings: list[ValidatorFinding]
     validated_phase: PlanningPhase
+    existing_files: frozenset[str] | None = None
 
 
 # --------------------------------------------------------------------------- #

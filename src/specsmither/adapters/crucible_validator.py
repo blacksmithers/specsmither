@@ -326,9 +326,12 @@ class CrucibleValidatorAdapter:
         # spec-internal existence; present (even empty) → E = existingFiles ∪
         # filesToBeCreated. Only probe the candidate paths crucible actually needs
         # evidence for, and only when a prober is wired (the local-first product path).
+        existing_files: frozenset[str] | None = None
         if self._file_prober is not None:
             candidates = compute_grep_candidates(spec_dict)
-            context["existingFiles"] = list(self._file_prober(candidates))
+            probed = list(self._file_prober(candidates))
+            context["existingFiles"] = probed
+            existing_files = frozenset(probed)
         result = cast(ValidationResult, crucible_validate(spec_dict, context))
 
         # gate_result is the AUTHORITATIVE per-phase verdict crucible composes
@@ -363,4 +366,5 @@ class CrucibleValidatorAdapter:
             per_ticket_score=per_ticket_score,
             findings=_collect_findings(result),
             validated_phase=phase,
+            existing_files=existing_files,
         )

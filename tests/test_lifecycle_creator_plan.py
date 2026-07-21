@@ -184,6 +184,27 @@ def test_plan_prepended_on_cross_validation_file_provenance_deny() -> None:
     assert "a file-provenance blocker" in result.blockers[-1]
 
 
+def test_plan_uses_the_grep_evidence_the_gate_used() -> None:
+    # The shared file is real in the repo (grep evidence) → NOT an orphan → no plan,
+    # even though the gate still carries a (different) file-provenance finding.
+    output = _fail_output([_finding("/cross-validation/file-provenance")])
+    output = ValidatorOutput(
+        gate_result=output.gate_result,
+        local_score=output.local_score,
+        per_epic_score=output.per_epic_score,
+        per_ticket_score=output.per_ticket_score,
+        findings=output.findings,
+        validated_phase=output.validated_phase,
+        existing_files=frozenset({"s.py"}),
+    )
+    result = gate_currently_passing(
+        _session(), _spec_full_with_orphan(), _FakeValidator(output), {"thresholds": {}}
+    )
+    assert isinstance(result, Denied)
+    assert result.blockers is not None
+    assert not any("shared file" in b for b in result.blockers)
+
+
 def test_no_plan_without_a_file_provenance_finding() -> None:
     # Gate fails for an unrelated reason → no orphan plan is surfaced.
     output = _fail_output([_finding("/cross-validation/wave-assignment")])
