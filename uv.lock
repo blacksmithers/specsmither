@@ -188,16 +188,16 @@ wheels = [
 
 [[package]]
 name = "crucible-forge"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/27/56/92a987128990cbc59723d7e5d52c6cedde6d38c36e1e949d6a0791d2f55e/crucible_forge-0.3.0.tar.gz", hash = "sha256:5c70f3694a4ed0c8b228f5524ac6c8104757054fa83f3a35017117de00de077a", size = 86703, upload-time = "2026-07-21T09:13:53.294Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/6a/14cf203fbbcb757e98ce9a16a4b2d926a37b371c46646d2a60d897a18042/crucible_forge-0.4.0.tar.gz", hash = "sha256:ec4edba44270498a7190aa52ce2b7089521c764f2741f430b7990323212976d1", size = 98082, upload-time = "2026-07-21T15:18:12.322Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/b5/a2af6cc14a8945d63aee0d8bfb2a3999678da0513ba7ea719732b561f89b/crucible_forge-0.3.0-py3-none-any.whl", hash = "sha256:6913eb631e4cec489ad74f7a3dd83c7517e9d5436f53a8ae317ce3b751d90883", size = 124482, upload-time = "2026-07-21T09:13:52.172Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/2d/a82252a04313180b90b6d9fcb208ccec40ab052ff8bbf0836dd25b57114c/crucible_forge-0.4.0-py3-none-any.whl", hash = "sha256:62d301ea94a7ee1c16518c0a8fa17a6b80e0183744f9c35bc0e7c68f9f34d61b", size = 137328, upload-time = "2026-07-21T15:18:10.843Z" },
 ]
 
 [[package]]
@@ -1290,7 +1290,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", specifier = ">=0.3.0" },
+    { name = "crucible-forge", specifier = ">=0.4.0" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crucible-forge", specifier = ">=0.3.0" },
+    { name = "crucible-forge", specifier = ">=0.4.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "python-ulid", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },

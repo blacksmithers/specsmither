@@ -26,7 +26,7 @@ dependencies = [
     # in dev (see [tool.uv.sources]); from PyPI (this floor) for a published build —
     # the ``[tool.uv.sources]`` workspace override does not reach the published metadata.
     "specsmither-lifecycle>=0.2.0",
-    "crucible-forge>=0.3.0",
+    "crucible-forge>=0.4.0",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
     "python-ulid>=2.0",
