@@ -28,6 +28,7 @@ import copy
 from typing import TYPE_CHECKING, Any
 
 import crucible
+from crucible.i18n import normalize_language
 
 if TYPE_CHECKING:
     from specsmither.lifecycle.ports import ConfigStore
@@ -117,7 +118,10 @@ def resolve_validator_config(
 
 
 def resolve_lifecycle_config(
-    config_store: ConfigStore, project_id: str, spec_id: str | None = None
+    config_store: ConfigStore,
+    project_id: str,
+    spec_id: str | None = None,
+    default_language: str = "en",
 ) -> dict[str, Any]:
     """Resolve the effective ``PlanningLifecycleConfig`` (domain ``planning-lifecycle``).
 
@@ -125,9 +129,16 @@ def resolve_lifecycle_config(
     *spec_id* is given) the spec's frozen snapshot, via the pure :func:`deep_merge`.
     With no stored overrides this returns the defaults. The defaults are deep-copied
     up front so the module-level constant is never aliased into the result.
+
+    ``default_language`` seeds the baseline ``guidance.language`` (normalized; an
+    unsupported tag degrades to ``"en"``) — the ambient default a caller supplies (the
+    embed's ``LifecyclePorts.default_language`` / the product's ``SPECSMITHER_LANGUAGE``).
+    A per-project or per-spec ``guidance.language`` override still wins over it.
     """
+    base = copy.deepcopy(PLANNING_LIFECYCLE_DEFAULTS)
+    base["guidance"]["language"] = normalize_language(default_language) or "en"
     result = deep_merge(
-        copy.deepcopy(PLANNING_LIFECYCLE_DEFAULTS),
+        base,
         config_store.get_project_overrides(project_id, PLANNING_LIFECYCLE_DOMAIN),
     )
     if spec_id is not None:

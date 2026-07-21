@@ -12,8 +12,9 @@ Adopts the `crucible-forge` 0.4.0 engine.
 
 ### Added
 
-- **Guidance internationalization.** A project can set
-  `planning-lifecycle` `guidance.language: pt-br` (aliases `pt` / `pt_BR`) to get the
+- **Guidance internationalization.** Set `SPECSMITHER_LANGUAGE=pt-br` (aliases
+  `pt` / `pt_BR`), or per project via the `planning-lifecycle` `guidance.language`
+  config, to get the
   entire planning guidance surface in Brazilian Portuguese — the variant bodies, the
   per-field interview catalogs, and the two structural recovery plans below, plus the
   validator engine's own findings. Scores, field paths, operation names, and code

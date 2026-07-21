@@ -18,7 +18,9 @@ cross-validation denials, and tracks the `crucible-forge` 0.4.0 engine.
   back to `en` for an absent/unsupported value. Every composer body and the per-field
   instruction scaffolding resolve through it; the field catalogs gain per-language
   `catalogs/<phase>.<lang>.yaml` prose overlays. Ships a complete Brazilian-Portuguese
-  translation.
+  translation. An embed selects the language per project/spec via the `config_store`
+  (`guidance.language`) or as an ambient default via `LifecyclePorts.default_language`;
+  the resolved tag is forwarded to `crucible-forge` so its findings match.
 - **`cycle_guidance.format_cycle_analysis` / `build_cycle_detected_denial`** — the
   per-edge evidence + 2-D recovery packet (cycle shape × the spurious edge's
   intra-batch/persisted origin) that enriches the `cycle_detected` deny.

@@ -16,3 +16,15 @@ concrete SQLite store, TUI, and MCP server.
 The verb surface satisfies a pure `(payload, ports) -> {response, WritePlan}` contract:
 a host embeds it by providing the `LifecyclePorts` seam (stores, validator, operations
 projector, clock, id generator) and consuming the returned `WritePlan`.
+
+## Guidance language
+
+All guidance prose is internationalized (English default, Brazilian Portuguese
+included). An embed selects the language two ways, in precedence order:
+
+1. **Per project / per spec** — return `{"guidance": {"language": "pt-br"}}` from the
+   `config_store` for the `planning-lifecycle` domain (frozen into the spec snapshot).
+2. **Ambient default** — set `LifecyclePorts(default_language="pt-br", …)`; used when a
+   project sets no explicit language. Supported: `en`, `pt-br` (aliases `pt`, `pt_BR`);
+   an unsupported tag degrades to `en`. The same tag is forwarded to `crucible-forge`
+   so its validator findings match.

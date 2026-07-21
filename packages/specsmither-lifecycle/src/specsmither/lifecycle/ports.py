@@ -387,3 +387,8 @@ class LifecyclePorts:
     persist_write_plan: PersistWritePlan | None = None
     clock: Clock | None = None
     id_generator: IdGenerator | None = None
+    #: The ambient guidance language default for a lifecycle-only consumer that does not
+    #: set ``planning-lifecycle`` ``guidance.language`` per project — the one-liner on-ramp
+    #: for a standalone embed (``pt-br`` etc.). Precedence: an explicit per-project /
+    #: per-spec ``guidance.language`` config wins over this, which wins over ``"en"``.
+    default_language: str = "en"

@@ -67,7 +67,8 @@ def complete_planning_session(
     light_spec = ports.spec_store.get_spec(session.specification_id)
     project_id = light_spec.project_id if light_spec is not None else ""
     lifecycle_config = resolve_lifecycle_config(
-        ports.config_store, project_id, session.specification_id
+        ports.config_store, project_id, session.specification_id,
+        default_language=ports.default_language,
     )
     validator_config = resolve_validator_config(
         ports.config_store, project_id, session.specification_id

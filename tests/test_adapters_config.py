@@ -225,6 +225,38 @@ def test_resolve_lifecycle_config_snapshot_override(tmp_path: Path) -> None:
     assert cfg["guidance"]["fieldRenderDetail"] == "rich"
 
 
+def test_default_language_seeds_the_baseline_guidance_language(tmp_path: Path) -> None:
+    # A standalone embed's ambient default (normalized) with no stored config.
+    _, sf = _store_db(tmp_path)
+    with sf() as session:
+        cfg = resolve_lifecycle_config(
+            ConfigStoreSqlite(session), "proj-empty", default_language="pt_BR"
+        )
+    assert cfg["guidance"]["language"] == "pt-br"
+
+    # An unsupported tag degrades to English rather than poisoning the config.
+    with sf() as session:
+        cfg = resolve_lifecycle_config(
+            ConfigStoreSqlite(session), "proj-empty", default_language="klingon"
+        )
+    assert cfg["guidance"]["language"] == "en"
+
+
+def test_explicit_config_language_wins_over_default_language(tmp_path: Path) -> None:
+    _, sf = _store_db(tmp_path)
+    with sf() as session, session.begin():
+        ConfigStoreSqlite(session).set_project_overrides(
+            "proj-1", PLANNING_LIFECYCLE_DOMAIN, {"guidance": {"language": "en"}}, 3
+        )
+
+    # default_language=pt-br is only the baseline; an explicit project override wins.
+    with sf() as session:
+        cfg = resolve_lifecycle_config(
+            ConfigStoreSqlite(session), "proj-1", default_language="pt-br"
+        )
+    assert cfg["guidance"]["language"] == "en"
+
+
 def test_resolve_lifecycle_config_project_then_spec(tmp_path: Path) -> None:
     _, sf = _store_db(tmp_path)
     with sf() as session, session.begin():

@@ -40,6 +40,16 @@ def test_resolve_db_path_precedence(tmp_path: Path) -> None:
     assert resolve_home({}) == Path.home() / ".specsmither"
 
 
+def test_resolve_language_precedence() -> None:
+    from specsmither.operations.workspace import LANGUAGE_ENV, resolve_language
+
+    # The raw env value passes through (the lifecycle normalizes pt/pt_BR → pt-br and
+    # degrades an unsupported tag); absent → the "en" default.
+    assert resolve_language({LANGUAGE_ENV: "pt-br"}) == "pt-br"
+    assert resolve_language({LANGUAGE_ENV: "pt"}) == "pt"
+    assert resolve_language({}) == "en"
+
+
 def test_workspace_config_roundtrip(tmp_path: Path) -> None:
     assert load_workspace_config(tmp_path) is None  # absent
     write_workspace_config(tmp_path, WorkspaceConfig(project_id="P1", specification_id="S1"))

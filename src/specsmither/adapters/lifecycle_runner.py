@@ -49,6 +49,7 @@ def run_verb(
     id_generator: IdGenerator | None = None,
     validator: Validator | None = None,
     file_prober: FileExistenceProber | None = None,
+    default_language: str = "en",
 ) -> PlanningAgentResponse:
     """Open one transaction, bind the ports, and run ``event`` end-to-end.
 
@@ -65,7 +66,11 @@ def run_verb(
     """
     with session_factory.begin() as session:
         ports = make_lifecycle_ports(
-            session, clock=clock, id_generator=id_generator, file_prober=file_prober
+            session,
+            clock=clock,
+            id_generator=id_generator,
+            file_prober=file_prober,
+            default_language=default_language,
         )
         if validator is not None:
             ports = replace(ports, validator=validator)

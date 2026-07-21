@@ -349,6 +349,7 @@ def make_lifecycle_ports(
     clock: Clock | None = None,
     id_generator: IdGenerator | None = None,
     file_prober: FileExistenceProber | None = None,
+    default_language: str = "en",
 ) -> LifecyclePorts:
     """Bind the eight :class:`LifecyclePorts` slots over one live ``Session``.
 
@@ -374,6 +375,7 @@ def make_lifecycle_ports(
         persist_write_plan=_persist,
         clock=clock if clock is not None else _utc_now,
         id_generator=id_generator if id_generator is not None else new_ulid,
+        default_language=default_language,
     )
 
 

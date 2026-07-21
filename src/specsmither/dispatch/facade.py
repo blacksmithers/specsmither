@@ -98,6 +98,7 @@ from specsmither.operations.reports import (
     time_report,
 )
 from specsmither.operations.search import search_tickets
+from specsmither.operations.workspace import resolve_language as resolve_language_env
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -259,10 +260,12 @@ class Dispatcher:
         *,
         clock: Callable[[], datetime] | datetime | None = None,
         file_prober: FileExistenceProber | None = None,
+        default_language: str = "en",
     ) -> None:
         self._session_factory = session_factory
         self._clock: Callable[[], datetime] | datetime = clock if clock is not None else _utc_now
         self._file_prober = file_prober
+        self._default_language = default_language
 
     def dispatch(
         self,
@@ -314,7 +317,12 @@ class Dispatcher:
         detail = normalise_response_detail(arguments.get("responseDetail", response_detail))
         payload: dict[str, Any] = {**arguments, "responseDetail": detail}
         event = LifecycleEvent(verb=_PLANNING_VERBS[tool], payload=payload)
-        response = run_verb(self._session_factory, event, file_prober=self._file_prober)
+        response = run_verb(
+            self._session_factory,
+            event,
+            file_prober=self._file_prober,
+            default_language=self._default_language,
+        )
         return lifecycle_envelope(response)
 
     # ---------------------------------------------------------------------------------- #
@@ -331,7 +339,11 @@ class Dispatcher:
         session_id = _arg(arguments, "sessionId")
         user_id = _arg(arguments, "userId")
         with self._session_factory.begin() as session:
-            ports = make_lifecycle_ports(session, file_prober=self._file_prober)
+            ports = make_lifecycle_ports(
+                session,
+                file_prober=self._file_prober,
+                default_language=self._default_language,
+            )
             if tool == "approve_handover":
                 outcome: HandoverOutcome = approve_handover(
                     ApproveHandoverPayload(session_id=session_id, user_id=user_id), ports
@@ -577,6 +589,7 @@ def make_dispatcher(
     clock: Callable[[], datetime] | datetime | None = None,
     project_root: Path | None = None,
     file_prober: FileExistenceProber | None = None,
+    default_language: str | None = None,
 ) -> Dispatcher:
     """Construct a :class:`Dispatcher` over ``session_factory`` (the L6 MCP server seam).
 
@@ -584,7 +597,15 @@ def make_dispatcher(
     reads which spec-declared paths already exist in the working tree. When given (and
     no explicit ``file_prober`` is passed) a :func:`filesystem_file_prober` rooted there
     is built; with neither, the validator falls back to strict spec-internal existence.
+
+    ``default_language`` is the ambient guidance language (the lifecycle's
+    ``default_language`` seam); when omitted it resolves from ``$SPECSMITHER_LANGUAGE``
+    (default ``"en"``). A per-project / per-spec ``guidance.language`` config wins over it.
     """
     if file_prober is None and project_root is not None:
         file_prober = filesystem_file_prober(project_root)
-    return Dispatcher(session_factory, clock=clock, file_prober=file_prober)
+    if default_language is None:
+        default_language = resolve_language_env()
+    return Dispatcher(
+        session_factory, clock=clock, file_prober=file_prober, default_language=default_language
+    )

@@ -73,7 +73,9 @@ def start_planning_session(
         raise SpecNotInPlanningError(str(spec_status))
 
     project_id = spec.project_id
-    lifecycle_config = resolve_lifecycle_config(ports.config_store, project_id, spec_id)
+    lifecycle_config = resolve_lifecycle_config(
+        ports.config_store, project_id, spec_id, default_language=ports.default_language
+    )
     validator_config = resolve_validator_config(ports.config_store, project_id, spec_id)
 
     active = ports.planning_session_store.get_active_planning_session_by_spec(spec_id)
