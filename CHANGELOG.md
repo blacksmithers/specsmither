@@ -4,6 +4,41 @@ All notable changes to `specsmither` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+Brings the planning guidance to Brazilian Portuguese and turns two cross-validation
+denials that used to leave an agent guessing into concrete, batched recovery plans.
+Adopts the `crucible-forge` 0.4.0 engine.
+
+### Added
+
+- **Guidance internationalization.** A project can set
+  `planning-lifecycle` `guidance.language: pt-br` (aliases `pt` / `pt_BR`) to get the
+  entire planning guidance surface in Brazilian Portuguese — the variant bodies, the
+  per-field interview catalogs, and the two structural recovery plans below, plus the
+  validator engine's own findings. Scores, field paths, operation names, and code
+  examples stay canonical, so an agent follows the same payloads in either language.
+  The default (`en`) output is byte-for-byte unchanged. An unsupported tag falls back
+  to English rather than failing the session.
+- **Cycle-resolution guidance.** When declaring dependencies would close a cycle, the
+  denial now carries a per-edge evidence packet (which direction is file-backed, the
+  epic/ticket order, the natural-precedence hint) plus a per-edge recovery plan — drop
+  the spurious edge by resubmitting without it when it is new to the batch, or by
+  `delete_dependencies` when it is already persisted; reshape the files when the loop
+  is a genuine circular file dependency. Indicative, never auto-applied.
+- **Creator-election plan on the shared-file gate.** When the cross-validation gate
+  denies on file provenance, it now leads with a consolidated plan: for every shared
+  file that tickets touch but none creates, the elected creator (the earliest
+  toucher), the exact dependency edges the other touchers need, and a per-file
+  acyclicity verdict — framed as ONE structural batch (elect creators, then declare
+  deps) instead of a per-file patch-and-rediscover loop.
+
+### Changed
+
+- **Adopts `crucible-forge` 0.4.0.** The validator engine gains guidance
+  internationalization; the adapter forwards the resolved language so engine findings
+  match the composer's. Default-English output is unchanged.
+
 ## 0.3.0
 
 Adopts the `crucible-forge` 0.3.0 validation engine — including its new file-graph
