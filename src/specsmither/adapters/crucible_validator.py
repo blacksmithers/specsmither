@@ -287,9 +287,19 @@ class CrucibleValidatorAdapter:
         self._file_prober = file_prober
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
-        """Score ``spec_full`` for ``phase`` → a flat :class:`ValidatorOutput`."""
+        """Score ``spec_full`` for ``phase`` → a flat :class:`ValidatorOutput`.
+
+        ``language`` (default ``"en"``) is forwarded to crucible as
+        ``context['language']`` so the engine's guidance prose (rubric / N/A /
+        cross-validation messages) matches the lifecycle composer's language; the
+        engine keeps scores, finding categories, and field paths canonical.
+        """
         # 'planned' (and any non-validator phase) → trivial pass; never call
         # crucible, which does not recognise the terminal sentinel.
         if phase not in _VALIDATOR_PHASES:
@@ -310,6 +320,7 @@ class CrucibleValidatorAdapter:
             "config": config,
             "activeEntityId": active_entity_id,
             "returns": ["structural", "scoring", "guidance"],
+            "language": language,
         }
         # Grep evidence for the file-provenance check. Tri-state: absent → strict
         # spec-internal existence; present (even empty) → E = existingFiles ∪

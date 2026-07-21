@@ -1,0 +1,51 @@
+{
+  "text": {
+    "phase.name.planning_spec": "Definição da Spec",
+    "phase.name.epic_decomposition": "Decomposição de Épicos",
+    "phase.name.epic_expansion": "Expansão de Épicos",
+    "phase.name.ticket_decomposition": "Decomposição de Tickets",
+    "phase.name.ticket_expansion": "Expansão de Tickets",
+    "phase.name.cross_validation": "Validação Cruzada",
+    "phase.name.planned": "Planejado",
+
+    "label.none": "(nenhuma)",
+    "label.notScored": "ainda não pontuado",
+    "label.thresholdNa": "n/d",
+    "label.gateUnknown": "desconhecido",
+    "label.finalized": "a especificação está finalizada (planejamento completo)",
+    "label.advancesTo": "a sessão avança para {phase}",
+
+    "findings.summary": "{count} constatação(ões) em {categories} categoria(s).",
+
+    "body.gatePassed": "Fase {idx} de 6 — {human}: o gate está passando (pontuação {score}, limite {threshold}). Continue refinando via {native}, ou chame `complete_planning_session` para entregar a especificação a um revisor humano.",
+    "body.gatePassed.nextSuffix": " {nextCount} entidade(s) estão listadas para uma passada final opcional.",
+    "body.gateFailed": "Fase {idx} de 6 — {human}: o gate está falhando (pontuação {score}, limite {threshold}). Resolva a(s) {findingCount} constatação(ões) pendente(s) via {native}, então re-execute a operação. Veja os movimentos recomendados para o verbo exato por constatação.",
+    "body.denied": "Negado: {message}",
+    "body.denied.blockers": " Motivos do bloqueio: {blockers}.",
+    "body.denied.fallbackMessage": "A operação foi negada.",
+    "body.phaseAdvance": "Avançou para a fase {idx} de 6 — {human}. Trabalhe esta fase via {native}; re-valide conforme avança e observe o gate antes de completar.",
+    "body.phaseRollback": "Retrocedeu para a fase {idx} de 6 — {human} para aplicar uma mudança estrutural nativa dessa fase. Restabeleça um gate passante via {native} antes de avançar novamente.",
+    "body.humanHandover": "A especificação está pronta para revisão humana. Compartilhe-a com um revisor e consulte `get_planning_status` para a decisão de aprovar / rejeitar.",
+    "body.awaitingHumanReview": "Aguardando revisão humana. A especificação está estacionada para um revisor — não continue editando a menos que solicitado. Consulte `get_planning_status` para a decisão. Na aprovação: {nextPhaseLabel}.",
+    "body.humanFeedback": "Feedback humano recebido:{quoted} Incorpore-o via {native} em {human}, então re-valide e chame `complete_planning_session` novamente.",
+    "body.humanFeedback.quoted": " \"{content}\"",
+    "body.humanRejected": "O humano rejeitou a entrega sem feedback escrito. Pergunte a ele o que precisa ser retrabalhado, resolva via {native} em {human}, então chame `complete_planning_session` novamente.",
+    "body.sessionClosed": "Sessão de planejamento encerrada. Fase final {human}, pontuação {score}, {actionsCount} ação(ões) registrada(s). A especificação está pronta.",
+    "body.statusReport": "Fase {idx} de 6 — {human}: gate {gate}, pontuação {score} (limite {threshold}). {hint} Operação(ões) nativa(s): {native}.",
+    "body.statusReport.hintPass": "Você pode continuar refinando via a(s) operação(ões) nativa(s), ou chamar `complete_planning_session` para entregar ao humano.",
+    "body.statusReport.hintFail": "Resolva as constatações pendentes via a(s) operação(ões) nativa(s), então chame `complete_planning_session`.",
+    "body.statusReport.hintUnknown": "Execute qualquer operação nativa para obter uma pontuação inicial.",
+
+    "field.header": "Você está na fase {idx} de 6: {name}.\nObjetivo: {goal}\nCaráter: {character}\n\nO que fazer nesta fase:",
+    "field.noneFillable": "(nenhum campo preenchível nesta fase)",
+    "field.bulletNone": "(nenhum)",
+    "field.required": "(obrigatório)",
+    "field.optional": "(opcional)",
+    "field.minCount": "    - Contagem mínima: {minCount}",
+    "field.tier": "    - Tier: {tier}",
+    "field.render": "Para **`{field}`** {requiredLabel}:\n- Shape: `{shape}`\n- {description}\n- Ganchos de entrevista:\n  {hooks}\n- {naClause}\n{minCountClause}\n{tierClause}\n\nExemplos:\n{examples}\n",
+    "field.naNotEligible": "Não elegível a N/A — deve ser preenchido.",
+    "field.naWhen": " quando {naWhen}",
+    "field.naEligible": "Elegível a N/A{when}: declare via `update_*` com `fieldDeclarations: { \"{field}\": { \"value\": \"N/A\", \"reason\": \"<≥20 chars>\" } }`."
+  }
+}

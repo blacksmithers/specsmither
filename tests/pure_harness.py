@@ -105,11 +105,17 @@ class StubValidator:
         self.per_ticket_score = per_ticket_score or {}
         self.findings = findings or []
         self.calls: list[PlanningPhase] = []
+        self.languages: list[str] = []
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
         self.calls.append(phase)
+        self.languages.append(language)
         return ValidatorOutput(
             gate_result=self.gate_result,  # type: ignore[arg-type]
             local_score=self.local_score,

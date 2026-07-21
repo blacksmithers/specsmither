@@ -93,6 +93,7 @@ def gate_currently_passing(
     spec_full: SpecFull | None,
     validator: Validator,
     validator_config: Mapping[str, Any],
+    language: str = "en",
 ) -> PrecheckResult:
     """Re-validate the spec at the session's current phase → :class:`Accepted` | :class:`Denied`.
 
@@ -113,7 +114,7 @@ def gate_currently_passing(
         )
 
     phase = PlanningPhase(session.current_phase)
-    output = validator.validate(spec_full, phase, validator_config)
+    output = validator.validate(spec_full, phase, validator_config, language=language)
 
     # Route the verdict through the phase-gate evaluator (NOT ``output.gate_result``):
     # for the ``*_expansion`` phases the gate is the spec-wide per-entity all-pass and

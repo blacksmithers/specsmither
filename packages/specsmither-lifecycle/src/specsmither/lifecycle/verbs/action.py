@@ -38,6 +38,7 @@ from specsmither.lifecycle.guidance.compose import (
     compose_get_planning_status,
     compose_response,
 )
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.operations_registry import (
     OPERATIONS,
     PlanningOperationName,
@@ -373,7 +374,10 @@ def _accept(
         native if (is_late_op and isinstance(native, PlanningPhase)) else current_phase
     )
 
-    validator_output = ports.validator.validate(projected, effective_phase, validator_config)
+    language = resolve_language(lifecycle_config)
+    validator_output = ports.validator.validate(
+        projected, effective_phase, validator_config, language=language
+    )
 
     # justify/unjustify touch the resolved entity (its id == spec_id for a spec-justify), so the
     # touched set comes from the resolution, not the op-name/phase-keyed helper.

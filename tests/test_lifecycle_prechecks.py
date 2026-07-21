@@ -111,7 +111,11 @@ class _FakeValidator:
         self.calls = 0
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
         self.calls += 1
         return self._output

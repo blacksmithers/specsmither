@@ -25,11 +25,13 @@ SpecSmither single-newline variant of the ``phase_intro`` template.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.resources import files
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
+
+from specsmither.lifecycle.i18n import t, text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -38,6 +40,10 @@ __all__ = ["compose_field_instructions"]
 
 #: Import-package that owns the ``catalogs/`` data directory.
 _CATALOG_PACKAGE = "specsmither.lifecycle.guidance"
+
+#: The canonical guidance language; a per-phase catalog with no ``<phase>.<lang>.yaml``
+#: overlay renders in this language.
+_DEFAULT_LANGUAGE = "en"
 
 _FieldState = Literal["empty", "partial", "filled"]
 
@@ -74,18 +80,79 @@ class _PhaseCatalog:
 # Catalog loading (importlib.resources + per-phase cache)                      #
 # --------------------------------------------------------------------------- #
 
-#: Per-phase catalog cache. ``None`` memoizes "no catalog for this phase" (e.g. ``planned``).
-_CATALOG_CACHE: dict[str, _PhaseCatalog | None] = {}
+#: Per-(phase, language) catalog cache. ``None`` memoizes "no catalog for this phase"
+#: (e.g. ``planned``).
+_CATALOG_CACHE: dict[tuple[str, str], _PhaseCatalog | None] = {}
 
 
-def _load_catalog(phase: str) -> _PhaseCatalog | None:
-    """Load (and cache) the ``catalogs/<phase>.yaml`` catalog; ``None`` when absent."""
+def _load_catalog(phase: str, language: str = _DEFAULT_LANGUAGE) -> _PhaseCatalog | None:
+    """Load (and cache) the ``catalogs/<phase>.yaml`` catalog for ``language``.
 
-    if phase in _CATALOG_CACHE:
-        return _CATALOG_CACHE[phase]
+    The English catalog is the source of truth; a non-default ``language`` overlays
+    the translated phase-content prose from ``catalogs/<phase>.<language>.yaml`` (a
+    per-key/per-field fallback to English), so a missing overlay renders in English.
+    ``None`` when the phase has no catalog at all.
+    """
+
+    key = (phase, language)
+    if key in _CATALOG_CACHE:
+        return _CATALOG_CACHE[key]
     catalog = _read_catalog(phase)
-    _CATALOG_CACHE[phase] = catalog
+    if catalog is not None and language != _DEFAULT_LANGUAGE:
+        catalog = _overlay_catalog(catalog, phase, language)
+    _CATALOG_CACHE[key] = catalog
     return catalog
+
+
+def _overlay_catalog(base: _PhaseCatalog, phase: str, language: str) -> _PhaseCatalog:
+    """Overlay ``base`` with the translated prose from ``<phase>.<language>.yaml``.
+
+    Only natural-language prose is overlaid — phase goal/character/human-name and,
+    per field (matched by ``field`` id), ``description`` / ``interview_hooks`` /
+    ``na_when``. Structural facts (required, shape, minCount, tier, naEligible,
+    autoPopulated) and code-literal ``examples`` stay canonical. A missing overlay
+    file, key, or field falls back to the English value.
+    """
+
+    resource = files(_CATALOG_PACKAGE).joinpath(f"catalogs/{phase}.{language}.yaml")
+    if not resource.is_file():
+        return base
+    raw: Any = yaml.safe_load(resource.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return base
+    by_id: dict[str, Mapping[str, Any]] = {
+        str(entry.get("field", "")): entry
+        for entry in raw.get("fields", [])
+        if isinstance(entry, dict)
+    }
+    fields = tuple(_overlay_field(field, by_id.get(field.field)) for field in base.fields)
+    return replace(
+        base,
+        phase_human_name=str(raw.get("phaseHumanName") or base.phase_human_name),
+        phase_goal=str(raw.get("phaseGoal") or base.phase_goal),
+        phase_character=str(raw.get("phaseCharacter") or base.phase_character),
+        fields=fields,
+    )
+
+
+def _overlay_field(field: _FieldEntry, tr: Mapping[str, Any] | None) -> _FieldEntry:
+    """Overlay one field's translatable prose (``None`` → the English entry unchanged)."""
+
+    if tr is None:
+        return field
+    description = tr.get("description")
+    na_when = tr.get("na_when")
+    hooks = tr.get("interview_hooks")
+    return replace(
+        field,
+        description=str(description) if description is not None else field.description,
+        na_when=str(na_when) if na_when else field.na_when,
+        interview_hooks=(
+            tuple(str(hook) for hook in hooks)
+            if isinstance(hooks, list) and hooks
+            else field.interview_hooks
+        ),
+    )
 
 
 def _read_catalog(phase: str) -> _PhaseCatalog | None:
@@ -180,56 +247,60 @@ def _detect_field_state(value: Any, field: _FieldEntry) -> _FieldState:
 # --------------------------------------------------------------------------- #
 
 
-def _bullet(items: Sequence[str], indent: str = "      ") -> str:
+def _bullet(
+    items: Sequence[str], indent: str = "      ", language: str = _DEFAULT_LANGUAGE
+) -> str:
     """Bulleted list (``bullet`` helper). ``(none)`` when empty; each item at ``indent``."""
 
     if items:
         return "\n".join(f"{indent}- {item}" for item in items)
-    return f"{indent}- (none)"
+    return f"{indent}- {text(language, 'field.bulletNone')}"
 
 
-def _na_clause(field: _FieldEntry) -> str:
+def _na_clause(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:
     """The field-level N/A instruction (``naClause``)."""
 
     if not field.na_eligible:
-        return "Not N/A-eligible — must be filled."
-    when = f" when {field.na_when}" if field.na_when else ""
-    return (
-        f"N/A-eligible{when}: declare via `update_*` with "
-        f'`fieldDeclarations: {{ "{field.field}": '
-        f'{{ "value": "N/A", "reason": "<≥20 chars>" }} }}`.'
-    )
+        return text(language, "field.naNotEligible")
+    when = t(language, "field.naWhen", {"naWhen": field.na_when}) if field.na_when else ""
+    return t(language, "field.naEligible", {"when": when, "field": field.field})
 
 
-def _render_field(field: _FieldEntry) -> str:
+def _render_field(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:
     """Render one field via the ``field_instruction`` template body."""
 
-    required_label = "(required)" if field.required else "(optional)"
+    required_key = "field.required" if field.required else "field.optional"
     min_count_clause = (
-        f"    - Minimum count: {field.min_count}" if field.min_count is not None else ""
+        t(language, "field.minCount", {"minCount": field.min_count})
+        if field.min_count is not None
+        else ""
     )
-    tier_clause = f"    - Tier: {field.tier}" if field.tier else ""
-    return (
-        f"For **`{field.field}`** {required_label}:\n"
-        f"- Shape: `{field.shape}`\n"
-        f"- {field.description}\n"
-        f"- Interview hooks:\n"
-        f"  {_bullet(field.interview_hooks)}\n"
-        f"- {_na_clause(field)}\n"
-        f"{min_count_clause}\n"
-        f"{tier_clause}\n"
-        f"\n"
-        f"Examples:\n"
-        f"{_bullet(field.examples)}\n"
+    tier_clause = t(language, "field.tier", {"tier": field.tier}) if field.tier else ""
+    return t(
+        language,
+        "field.render",
+        {
+            "field": field.field,
+            "requiredLabel": text(language, required_key),
+            "shape": field.shape,
+            "description": field.description,
+            "hooks": _bullet(field.interview_hooks, language=language),
+            "naClause": _na_clause(field, language),
+            "minCountClause": min_count_clause,
+            "tierClause": tier_clause,
+            "examples": _bullet(field.examples, language=language),
+        },
     )
 
 
-def _compose_field_instructions(fields: Sequence[_FieldEntry]) -> str:
+def _compose_field_instructions(
+    fields: Sequence[_FieldEntry], language: str = _DEFAULT_LANGUAGE
+) -> str:
     """The full per-field block for a phase's fields (``composeFieldInstructions``)."""
 
     if not fields:
-        return "(no fillable fields in this phase)"
-    return "\n".join(_render_field(field) for field in fields)
+        return text(language, "field.noneFillable")
+    return "\n".join(_render_field(field, language) for field in fields)
 
 
 # --------------------------------------------------------------------------- #
@@ -240,17 +311,20 @@ def _compose_field_instructions(fields: Sequence[_FieldEntry]) -> str:
 def compose_field_instructions(
     phase: str,
     spec_snapshot: Mapping[str, Any] | None = None,
+    language: str = _DEFAULT_LANGUAGE,
 ) -> str:
-    """Render the rich per-field guidance block for ``phase``.
+    """Render the rich per-field guidance block for ``phase`` in ``language``.
 
     Returns ``""`` for phases with no catalog (e.g. ``planned``). System-set /
     not-agent-fillable fields (``autoPopulated``) are always excluded — the actor never
     fills those. When ``spec_snapshot`` is given only the fields still needing work
     (``empty`` / ``partial``) render; when it is ``None`` the full phase catalog renders
     (the phase-intro / orientation view). The block is prefixed with the phase header.
+    A non-default ``language`` overlays the translated phase-content prose (English
+    fallback per key); the structural frame comes from the shared text catalog.
     """
 
-    catalog = _load_catalog(phase)
+    catalog = _load_catalog(phase, language)
     if catalog is None:
         return ""
 
@@ -263,11 +337,14 @@ def compose_field_instructions(
             if _field_state(field, spec_snapshot) in ("empty", "partial")
         ]
 
-    header = (
-        f"You are in phase {catalog.phase_index} of 6: {catalog.phase_human_name}.\n"
-        f"Goal: {catalog.phase_goal}\n"
-        f"Character: {catalog.phase_character}\n"
-        f"\n"
-        f"What to do in this phase:"
+    header = t(
+        language,
+        "field.header",
+        {
+            "idx": catalog.phase_index,
+            "name": catalog.phase_human_name,
+            "goal": catalog.phase_goal,
+            "character": catalog.phase_character,
+        },
     )
-    return f"{header}\n{_compose_field_instructions(fields)}".rstrip()
+    return f"{header}\n{_compose_field_instructions(fields, language)}".rstrip()

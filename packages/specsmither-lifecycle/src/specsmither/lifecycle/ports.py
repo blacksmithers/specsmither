@@ -330,11 +330,17 @@ class Validator(Protocol):
 
     The production impl wraps crucible's synchronous ``validate`` and maps its
     richer result down to :class:`ValidatorOutput`. ``config`` is the effective
-    merged ``ValidatorConfig`` dict.
+    merged ``ValidatorConfig`` dict. ``language`` is the resolved guidance language
+    (``"en"`` default; e.g. ``"pt-br"``) the impl forwards to the engine so its
+    findings' prose matches the composer's — scores and field paths stay canonical.
     """
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput: ...
 
 

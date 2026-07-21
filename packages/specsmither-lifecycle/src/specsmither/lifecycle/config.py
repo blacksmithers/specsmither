@@ -46,18 +46,23 @@ __all__ = [
 PLANNING_DOMAIN = "planning"
 #: The lifecycle-guidance namespace.
 PLANNING_LIFECYCLE_DOMAIN = "planning-lifecycle"
-#: The schema version stamped on a ``planning-lifecycle`` write (bumped 1→2 at the
-#: guidance-config trim). Surfaced for the spec-create snapshot freeze (L4).
-PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION = 2
+#: The schema version stamped on a ``planning-lifecycle`` write (1→2 at the
+#: guidance-config trim; 2→3 adding ``guidance.language``). Surfaced for the
+#: spec-create snapshot freeze (L4).
+PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION = 3
 
 #: Baseline ``planning-lifecycle`` config — merged under project/spec overrides.
-#: Trimmed to the two surviving guidance knobs (see module docstring).
+#: Trimmed to the surviving guidance knobs (see module docstring).
 PLANNING_LIFECYCLE_DEFAULTS: dict[str, Any] = {
     "guidance": {
         # Max entities shown in the expansion-phase "next to fill" block. Caps size.
         "maxNextEntitiesToShow": 3,
         # Phase-entry field-block fidelity: 'rich' (full per-field render) | 'concise'.
         "fieldRenderDetail": "rich",
+        # Guidance language for the composer's prose AND the crucible findings seam.
+        # 'en' (default) | 'pt-br' (aliases 'pt'/'pt_BR'); normalized on read. An
+        # unsupported tag falls back to 'en' rather than failing the lifecycle.
+        "language": "en",
     },
 }
 

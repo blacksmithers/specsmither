@@ -29,6 +29,7 @@ from specsmither.domain.enums import (
 from specsmither.lifecycle.audit import build_action
 from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.guidance.compose import compose_response
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.prechecks import Denied, spec_status_check
 from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.lifecycle.verbs.support import (
@@ -180,8 +181,9 @@ def _resume(
 
     # Locked decision 3: never trust the cache on resume — always re-validate.
     spec_full = ports.spec_store.get_spec_full(session.specification_id)
+    language = resolve_language(lifecycle_config)
     validator_output = (
-        ports.validator.validate(spec_full, phase, validator_config)
+        ports.validator.validate(spec_full, phase, validator_config, language=language)
         if spec_full is not None
         else None
     )

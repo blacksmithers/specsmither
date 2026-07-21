@@ -28,6 +28,7 @@ from specsmither.domain.enums import (
 from specsmither.lifecycle.audit import build_action, build_transition
 from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.guidance.compose import compose_response
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.prechecks import Denied, gate_currently_passing, spec_status_check
 from specsmither.lifecycle.verbs.support import (
     SessionNotFoundError,
@@ -98,7 +99,13 @@ def complete_planning_session(
 
     # 3. the gate gate — ALWAYS re-validates (no TTL).
     spec_full = ports.spec_store.get_spec_full(session.specification_id)
-    gate_check = gate_currently_passing(session, spec_full, ports.validator, validator_config)
+    gate_check = gate_currently_passing(
+        session,
+        spec_full,
+        ports.validator,
+        validator_config,
+        language=resolve_language(lifecycle_config),
+    )
     if isinstance(gate_check, Denied):
         return _denied(ports, session, gate_check, user_id, lifecycle_config, validator_config)
 

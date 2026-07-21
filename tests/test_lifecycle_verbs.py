@@ -81,7 +81,11 @@ class _StubValidator:
         self.calls: list[PlanningPhase] = []
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
         self.calls.append(phase)
         return ValidatorOutput(
