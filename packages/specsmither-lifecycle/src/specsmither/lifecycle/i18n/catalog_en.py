@@ -203,5 +203,49 @@ TEXT_EN: dict[str, str] = {
         "persisted, so `delete_dependencies` would be a no-op)"
     ),
     "cycle.recovery.orderNote": " and no decisive order signal",
+    # -- creator-election guidance (the CPS shared-file gate_not_passed deny) ---
+    "creator.header.one": (
+        "{fileCount} shared file is touched by planning tickets but created by none — the "
+        "provenance↔ordering↔acyclicity trilemma. Resolve them as a STRUCTURAL BATCH, not "
+        "per line: in ONE `ticket_expansion` pass make ALL the file-array moves below (each "
+        "`update_ticket` moving `filesToBeModified` → `filesToBeCreated` rolls you back to "
+        "ticket_expansion, correctly), then in ONE `cross_validation` pass declare ALL the "
+        "deps with `create_dependencies`. `get_ticket` to confirm the election first. "
+        "Piecemeal — fixing one file, rolling back, rediscovering the rest — re-triggers "
+        "this gate."
+    ),
+    "creator.header.many": (
+        "{fileCount} shared files are touched by planning tickets but created by none — the "
+        "provenance↔ordering↔acyclicity trilemma. Resolve them as a STRUCTURAL BATCH, not "
+        "per line: in ONE `ticket_expansion` pass make ALL the file-array moves below (each "
+        "`update_ticket` moving `filesToBeModified` → `filesToBeCreated` rolls you back to "
+        "ticket_expansion, correctly), then in ONE `cross_validation` pass declare ALL the "
+        "deps with `create_dependencies`. `get_ticket` to confirm the election first. "
+        "Piecemeal — fixing one file, rolling back, rediscovering the rest — re-triggers "
+        "this gate."
+    ),
+    "creator.entry.file.one": '• "{file}" — touched by {n} ticket, created by none.',
+    "creator.entry.file.many": '• "{file}" — touched by {n} tickets, created by none.',
+    "creator.entry.elect": "    elect {electedCreator} as the creator ({reason}).",
+    "creator.entry.move": (
+        '    ticket_expansion: `update_ticket {electedCreator}` — move "{file}" from '
+        "{fromField} → filesToBeCreated{othersKeepIt}."
+    ),
+    "creator.othersKeepIt": " (the other touchers keep it in filesToBeModified)",
+    "creator.entry.deps": "    cross_validation: `create_dependencies` — {depsClause}.",
+    "creator.entry.noDeps": (
+        "    cross_validation: no deps — a single toucher, the flip is the whole fix."
+    ),
+    "creator.dep": "{fromId} requires {toId}",
+    "creator.entry.conflict": (
+        "    ⚠ conflict — do NOT auto-elect: an existing dependency already orders these "
+        "tickets against the natural (earliest-toucher) order, so declaring the deps above "
+        "would close a cycle. `get_ticket {ids}` and decide the real creator from the "
+        "tickets' content, then reconcile the contradicting edge."
+    ),
+    "creator.entry.acyclic": (
+        "    ✓ acyclic — the deps point backward in the order; safe to declare."
+    ),
 }
+
 

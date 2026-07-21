@@ -35,13 +35,36 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from crucible.cross_validation.creator_election import elect_file_creators
+
 from specsmither.domain.enums import PlanningPhase
 from specsmither.lifecycle.gate import evaluate_phase_gate_spec_wide
+from specsmither.lifecycle.guidance.creator_plan_guidance import format_creator_plan
 from specsmither.lifecycle.ports import SpecFull, Validator
 from specsmither.lifecycle.prechecks.result import Accepted, Denied, PrecheckResult
 from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 __all__ = ["gate_currently_passing"]
+
+#: Locator prefix the crucible adapter stamps on file-provenance layer findings — the
+#: gate condition for surfacing the creator-election plan (only when the gate is actually
+#: failing on orphan-file provenance, so the plan never appears for an unrelated fail).
+_FILE_PROVENANCE_PATHS = ("/cross-validation/file-provenance", "/cross-validation/file-conflict")
+
+
+def _creator_plan_block(spec_full: SpecFull, output: Any, language: str) -> str:
+    """The consolidated creator-election plan for a cross_validation file-provenance deny.
+
+    Empty unless the gate carries a file-provenance finding AND there is at least one
+    orphan shared file to plan. Uses the strict spec-internal existence model (the
+    grep-scoped variant that excludes real-repo brownfield files rides the CPS grep
+    double-call, not yet wired here) — so the plan is gated on an actual file-provenance
+    finding, keeping it consistent with why the gate failed.
+    """
+    if not any((f.path or "") in _FILE_PROVENANCE_PATHS for f in output.findings):
+        return ""
+    spec_dict = spec_full.spec.model_dump(by_alias=True, exclude_none=True)
+    return format_creator_plan(elect_file_creators(spec_dict), language)
 
 
 def _entity_scoreboard(
@@ -130,6 +153,16 @@ def gate_currently_passing(
 
     if gate.gate_outcome != "pass":
         scoreboard = _entity_scoreboard(phase, output, spec_full, validator_config)
+        # At cross_validation, PREPEND the consolidated creator-election plan above the flat
+        # findings so the actor resolves ALL orphan shared files as ONE structural batch
+        # (elect creators in ticket_expansion, declare deps in cross_validation) instead of
+        # patching one, rolling back, and rediscovering the rest.
+        plan_block = (
+            [_creator_plan_block(spec_full, output, language)]
+            if phase == PlanningPhase.CROSS_VALIDATION
+            else []
+        )
+        plan_block = [b for b in plan_block if b]
         return Denied(
             code="gate_not_passed",
             message=(
@@ -141,9 +174,9 @@ def gate_currently_passing(
                 "gate_result": output.gate_result,
                 "phase": phase.value,
             },
-            # Lead with the per-entity scoreboard (which entities are short), then the
-            # per-finding blockers (what to add). Empty scoreboard for the non-expansion phases.
-            blockers=[*scoreboard, *(f.message for f in output.findings)],
+            # Lead with the creator-election plan (cross_validation only), then the per-entity
+            # scoreboard (which entities are short), then the per-finding blockers (what to add).
+            blockers=[*plan_block, *scoreboard, *(f.message for f in output.findings)],
         )
 
     return Accepted()

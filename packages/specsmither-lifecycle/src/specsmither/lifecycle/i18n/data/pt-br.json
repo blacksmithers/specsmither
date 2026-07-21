@@ -74,6 +74,19 @@
     "cycle.recovery.ambiguous": "{getTicket} e decida a partir do conteúdo dos tickets: o laço não compartilha arquivo justificador{orderNote}, então mantenha no máximo UMA direção se existir uma ordem de execução real (ou nenhuma se os tickets forem independentes), então {mechanism}. NÃO mantenha uma direção sem base, e NÃO corte às cegas.",
     "cycle.recovery.mechanism.persisted": "descarte a direção que você julgar espúria — use `delete_dependencies` nela se já estiver persistida, ou OMITA-a no reenvio se for uma aresta nova do batch",
     "cycle.recovery.mechanism.intra-batch": "RE-ENVIE `create_dependencies` OMITINDO a(s) direção(ões) que você descartar (nada foi persistido, então `delete_dependencies` seria um no-op)",
-    "cycle.recovery.orderNote": " e nenhum sinal de ordem decisivo"
+    "cycle.recovery.orderNote": " e nenhum sinal de ordem decisivo",
+
+    "creator.header.one": "{fileCount} arquivo compartilhado é tocado por tickets de planejamento mas criado por nenhum — o trilema proveniência↔ordenação↔aciclicidade. Resolva-os como um LOTE ESTRUTURAL, não por linha: em UMA passada de `ticket_expansion` faça TODOS os movimentos de arrays de arquivo abaixo (cada `update_ticket` movendo `filesToBeModified` → `filesToBeCreated` te retrocede para ticket_expansion, corretamente), então em UMA passada de `cross_validation` declare TODAS as deps com `create_dependencies`. Use `get_ticket` para confirmar a eleição primeiro. Aos poucos — corrigindo um arquivo, retrocedendo, redescobrindo o resto — re-dispara este gate.",
+    "creator.header.many": "{fileCount} arquivos compartilhados são tocados por tickets de planejamento mas criados por nenhum — o trilema proveniência↔ordenação↔aciclicidade. Resolva-os como um LOTE ESTRUTURAL, não por linha: em UMA passada de `ticket_expansion` faça TODOS os movimentos de arrays de arquivo abaixo (cada `update_ticket` movendo `filesToBeModified` → `filesToBeCreated` te retrocede para ticket_expansion, corretamente), então em UMA passada de `cross_validation` declare TODAS as deps com `create_dependencies`. Use `get_ticket` para confirmar a eleição primeiro. Aos poucos — corrigindo um arquivo, retrocedendo, redescobrindo o resto — re-dispara este gate.",
+    "creator.entry.file.one": "• \"{file}\" — tocado por {n} ticket, criado por nenhum.",
+    "creator.entry.file.many": "• \"{file}\" — tocado por {n} tickets, criado por nenhum.",
+    "creator.entry.elect": "    eleja {electedCreator} como o criador ({reason}).",
+    "creator.entry.move": "    ticket_expansion: `update_ticket {electedCreator}` — mova \"{file}\" de {fromField} → filesToBeCreated{othersKeepIt}.",
+    "creator.othersKeepIt": " (os outros que tocam mantêm em filesToBeModified)",
+    "creator.entry.deps": "    cross_validation: `create_dependencies` — {depsClause}.",
+    "creator.entry.noDeps": "    cross_validation: sem deps — um único ticket que toca, o flip é a correção inteira.",
+    "creator.dep": "{fromId} requer {toId}",
+    "creator.entry.conflict": "    ⚠ conflito — NÃO auto-eleja: uma dependência existente já ordena estes tickets contra a ordem natural (ticket que toca primeiro), então declarar as deps acima fecharia um ciclo. Use `get_ticket {ids}` e decida o criador real a partir do conteúdo dos tickets, então reconcilie a aresta contraditória.",
+    "creator.entry.acyclic": "    ✓ acíclico — as deps apontam para trás na ordem; seguro declarar."
   }
 }
