@@ -136,6 +136,9 @@ def _success(
         ),
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        # CPS only reaches success once gate_currently_passing accepted — report it as passing,
+        # not the pre-mutation cache (which could still read 'fail').
+        gate_outcome="pass",
     )
 
     transition = build_transition(
@@ -184,12 +187,16 @@ def _denied(
 ) -> VerbResult:
     _, _, clock = resolve_now(ports)
 
+    # Report the gate verdict the denial implies, not the pre-mutation cache: a gate denial
+    # is a failing gate ('fail'); a session/spec-precondition denial ran no gate (None).
+    gate_outcome = "fail" if denial.code == "gate_not_passed" else None
     response = compose_response(
         variant=GuidanceVariant.DENIED,
         session=session,
         denial=denial,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        gate_outcome=gate_outcome,
     )
 
     action = build_action(

@@ -158,12 +158,13 @@ def touched_entity_ids(
 ) -> list[str]:
     """The flat touched-id list the phase gate consumes (``extractTouchedEntityIds``).
 
-    Derived per *effective* phase to match the gate's flat contract: the spec id in
-    ``planning_spec`` / ``cross_validation``; the edited entity id (``payload.id``) in
-    the two ``*_expansion`` phases; ``[]`` for the binary ``*_decomposition`` phases
-    (which ignore it).
+    Keyed to the mutating op's target (which the effective phase pins down): the spec id
+    in ``planning_spec`` (where the only mutating op is ``update_spec``); the edited entity
+    id (``payload.id``) in the two ``*_expansion`` phases; ``[]`` everywhere else — the
+    binary ``*_decomposition`` phases and ``cross_validation``, whose native ops
+    (dependencies / blueprint links) touch no scored entity, so they emit no spec datapoint.
     """
-    if effective_phase in (PlanningPhase.PLANNING_SPEC, PlanningPhase.CROSS_VALIDATION):
+    if effective_phase == PlanningPhase.PLANNING_SPEC:
         return [spec_id]
     if effective_phase in (PlanningPhase.EPIC_EXPANSION, PlanningPhase.TICKET_EXPANSION):
         raw_id = (payload or {}).get("id")

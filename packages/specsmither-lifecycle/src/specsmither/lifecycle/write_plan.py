@@ -649,13 +649,15 @@ def build_op_write_items(op: str, payload: Mapping[str, Any] | None) -> OpWriteI
         # cross_validation blueprint-coverage check never accumulates and the loop stalls.
         blueprint_id = p.get("blueprintId")
         ticket_ids = p.get("ticketIds") or []
-        if not isinstance(blueprint_id, str):
+        if not isinstance(blueprint_id, str) or not blueprint_id:
             return OpWriteItems()
         linking = op == "link_blueprint_to_tickets"
         link_items: list[WritePlanItem] = []
+        seen_tids: set[str] = set()
         for tid in ticket_ids:
-            if not isinstance(tid, str):
-                continue
+            if not isinstance(tid, str) or tid in seen_tids:
+                continue  # dedup: one join row per (ticket, blueprint) pair
+            seen_tids.add(tid)
             ref_id = f"{tid}-br-{blueprint_id}"
             if linking:
                 link_items.append(

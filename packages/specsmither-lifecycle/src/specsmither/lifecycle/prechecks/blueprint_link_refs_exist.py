@@ -36,7 +36,7 @@ def blueprint_link_refs_exist(
     blueprint_id = payload.get("blueprintId")
     if isinstance(blueprint_id, str) and blueprint_id not in blueprint_ids:
         return Denied(
-            code="dangling_reference",
+            code="broken_reference",
             message=(
                 f"Blueprint '{blueprint_id}' does not exist in this specification. "
                 "Link against one of the listed blueprint ids."
@@ -56,7 +56,7 @@ def blueprint_link_refs_exist(
     ]
     if missing:
         return Denied(
-            code="dangling_reference",
+            code="broken_reference",
             message=(
                 f"{len(missing)} ticket id(s) in this link do not exist: "
                 f"{', '.join(missing)}. Link only existing tickets."

@@ -335,10 +335,14 @@ def _compose_body(
         return body
 
     if variant in (GuidanceVariant.PHASE_ADVANCE, GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE):
-        return (
+        # Entering a phase: render the per-field catalog (fields to fill + threshold + native
+        # ops), mirroring composePhaseIntro — the agent needs it before its first op, not only
+        # after a gate failure.
+        body = (
             f"Advanced to phase {idx} of 6 — {human}. Work this phase via {native}; "
             "re-validate as you go and watch the gate before completing."
         )
+        return _append_field_instructions(body, phase)
 
     if variant == GuidanceVariant.PHASE_ROLLBACK:
         return (
@@ -393,15 +397,23 @@ def _compose_body(
         )
     else:
         hint = "Run any native operation to get an initial score."
-    return (
+    # PHASE_STATUS_REPORT is the cold-start / orientation body (SPS create, inspect): render the
+    # per-field catalog so a freshly-started session gets the fill-in guidance up front.
+    return _append_field_instructions(
         f"{header}: gate {gate_label}, score {score_label} (threshold {threshold_label}). "
-        f"{hint} Native operation(s): {native}."
+        f"{hint} Native operation(s): {native}.",
+        phase,
     )
 
 
 # --------------------------------------------------------------------------- #
 # The umbrella composer                                                       #
 # --------------------------------------------------------------------------- #
+
+
+#: Sentinel for the ``gate_outcome`` override — distinguishes "not provided" (derive the
+#: gate) from an explicit ``None`` ("unknown", echo it verbatim).
+_UNSET: Any = object()
 
 
 def compose_response(
@@ -415,6 +427,7 @@ def compose_response(
     lifecycle_config: Mapping[str, Any] | None = None,
     validator_config: Mapping[str, Any] | None = None,
     score_global: float | None = None,
+    gate_outcome: str | None | Any = _UNSET,
 ) -> PlanningAgentResponse:
     """Compose the :class:`PlanningAgentResponse` a verb returns, keyed by ``variant``.
 
@@ -432,8 +445,13 @@ def compose_response(
     spec_id = spec_full.spec.id if spec_full is not None else session.specification_id
 
     score = validator_output.local_score if validator_output is not None else session.last_score
-    if gate_result is not None:
-        gate: GateResult | None = gate_result.gate_outcome
+    if gate_outcome is not _UNSET:
+        # An explicit per-branch verdict from the caller (CPS hard-codes it per outcome;
+        # inspect echoes the persisted ``last_gate_result``). Highest precedence — never
+        # re-derived, so the reported ``gate_result`` cannot contradict the verb outcome.
+        gate: GateResult | None = _coerce_gate(gate_outcome)
+    elif gate_result is not None:
+        gate = gate_result.gate_outcome
     elif validator_output is not None:
         # Report the PHASE-GATE verdict, not the validator's composite ``gate_result``:
         # at the ``*_expansion`` phases the composite folds in the global cascade

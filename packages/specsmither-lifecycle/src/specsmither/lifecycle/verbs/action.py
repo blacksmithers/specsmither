@@ -336,9 +336,17 @@ def _accept(
         else PlanningSessionStatus.ACTIVE.value
     )
 
+    # Variant precedence mirrors resolveVariant: a structural rollback wins; then an edit on an
+    # awaiting session (a HUMAN edit keeps it awaiting → handover; an AGENT edit on an awaiting
+    # session → feedback); otherwise the gate verdict.
+    _awaiting = PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value
     variant = (
         GuidanceVariant.PHASE_ROLLBACK
         if rollback is not None
+        else GuidanceVariant.HUMAN_HANDOVER
+        if post_session_status == _awaiting
+        else GuidanceVariant.HUMAN_FEEDBACK
+        if prev_session_status == _awaiting
         else GuidanceVariant.GATE_PASSED
         if gate.gate_outcome == "pass"
         else GuidanceVariant.GATE_FAILED

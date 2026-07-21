@@ -61,27 +61,27 @@ def operation_allowed(
         )
 
     rollback = classification == "late" and not _is_field_declarations_only_update(op, payload)
-    if (
-        rollback
-        and op.startswith("create_")
-        and current_phase in (PlanningPhase.EPIC_EXPANSION, PlanningPhase.TICKET_EXPANSION)
-    ):
-        # structural_create_in_expansion (2bf6d24f) — a structural create in a SCORED
-        # expansion phase must NOT silently roll the session back to its native phase
-        # (which orphans the freshly-created entity and skews the gate baseline mid-drive).
-        # Soft-deny and name the recovery update_ op instead.
-        recovery = op.replace("create_", "update_", 1)
+    if op == "create_ticket" and current_phase == PlanningPhase.TICKET_EXPANSION:
+        # structural_create_in_expansion — create_ticket is native to ticket_decomposition,
+        # so in the SCORED ticket_expansion phase it lands as a late op that would roll the
+        # session back and orphan a fresh, empty ticket, skewing the gate baseline mid-drive.
+        # Soft-deny and point at update_ticket instead. This fires for THIS pair ONLY:
+        # create_epic / create_blueprint in an expansion phase are late ops that legitimately
+        # roll back and create (Accepted below), and create_ticket is forbidden in
+        # epic_expansion, so ticket_expansion is the only scored phase it lands in.
         return Denied(
             code="structural_create_in_expansion",
             message=(
-                f"Cannot '{op}' during the scored '{current_phase.value}' phase — it would "
-                f"orphan the new entity and skew the gate. Refine existing entities with "
-                f"'{recovery}', or complete this phase first."
+                "ticket_expansion fills in existing tickets — it does not create them. "
+                "Creating here would roll the session back to ticket_decomposition and "
+                "orphan the new ticket. Use 'update_ticket' on an existing id "
+                "(call get_planning_status for the full roster)."
             ),
             context={
                 "operation": op,
                 "current_phase": current_phase.value,
-                "recovery_operation": recovery,
+                "native_phase": PlanningPhase.TICKET_DECOMPOSITION.value,
+                "recovery_operation": "update_ticket",
             },
         )
     return Accepted(rollback=rollback)

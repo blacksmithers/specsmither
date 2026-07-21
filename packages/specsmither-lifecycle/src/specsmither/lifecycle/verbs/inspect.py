@@ -56,6 +56,9 @@ def inspect_planning_session(
         validator_output=cached_output,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        # Read-only: echo the PERSISTED gate verdict; never re-derive the gate from the cached
+        # blob (which can disagree with last_gate_result on a spec that changed since).
+        gate_outcome=session.last_gate_result,
     )
     # Read-only: no WritePlan.
     return VerbResult(response, None)
