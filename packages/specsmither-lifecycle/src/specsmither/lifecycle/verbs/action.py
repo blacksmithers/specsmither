@@ -60,6 +60,10 @@ from specsmither.lifecycle.prechecks import (
     spec_status_check,
     validate_dependencies_batch,
 )
+from specsmither.lifecycle.prechecks.strip_field_declarations import (
+    strip_agent_wire_field_declarations,
+)
+from specsmither.lifecycle.verbs.justify_support import JustifyResolution, resolve_justify
 from specsmither.lifecycle.verbs.support import (
     SessionNotFoundError,
     VerbResult,
@@ -86,6 +90,32 @@ if TYPE_CHECKING:
 
 
 __all__ = ["action_planning_session"]
+
+#: Resolved-entity kind → the ``update_*`` op whose mutation machinery justify reuses.
+_ENTITY_UPDATE_OP: dict[str, str] = {
+    "spec": "update_spec",
+    "epic": "update_epic",
+    "ticket": "update_ticket",
+}
+
+
+def _justify_mutation(res: JustifyResolution) -> tuple[str, dict[str, Any]]:
+    """The synthetic ``update_*`` ``(op, payload)`` a justify/unjustify resolves to — a
+    ``SpecMutation`` SET of the merged ``fieldDeclarations`` on the resolved entity."""
+    payload: dict[str, Any] = {"fields": {"fieldDeclarations": res.field_declarations}}
+    if res.entity_type != "spec":
+        payload["id"] = res.entity_id
+    return _ENTITY_UPDATE_OP[res.entity_type], payload
+
+
+def _na_reason_min_length(validator_config: Mapping[str, Any]) -> int:
+    """The ``naReason.minLength`` bound (default 20) justify enforces on the reason."""
+    na = validator_config.get("naReason")
+    if isinstance(na, dict):
+        raw = na.get("minLength")
+        if isinstance(raw, int):
+            return raw
+    return 20
 
 
 def action_planning_session(
@@ -148,6 +178,12 @@ def action_planning_session(
         return _denied(ports, session, operation, op_payload, op_allowed, user_id, lifecycle_config, validator_config)
     is_late_op = op_allowed.rollback
 
+    # The agent-wire clean break: strip `fieldDeclarations` from update_*/create_* payloads
+    # AFTER operation_allowed has classified the op (rollback decision unchanged) so the key
+    # never reaches the persisted mutation NOR the projection. `justify`/`unjustify` own the
+    # canonical key and are excluded (no-op here).
+    op_payload = strip_agent_wire_field_declarations(operation, op_payload)
+
     schema_result = schema_validate(operation, op_payload)
     if isinstance(schema_result, Denied):
         return _denied(ports, session, operation, op_payload, schema_result, user_id, lifecycle_config, validator_config)
@@ -196,6 +232,18 @@ def action_planning_session(
         if isinstance(batch, Denied):
             return _denied(ports, session, operation, op_payload, batch, user_id, lifecycle_config, validator_config)
 
+    # justify / unjustify — resolve the target entity + validate the scope/reason, producing
+    # the FULL merged fieldDeclarations map. The resolution threads into the projection, the
+    # SpecMutation, and the touched-entity set below.
+    justify_resolution: JustifyResolution | None = None
+    if operation in ("justify", "unjustify"):
+        jr = resolve_justify(
+            operation, op_payload or {}, spec_full, _na_reason_min_length(validator_config)
+        )
+        if isinstance(jr, Denied):
+            return _denied(ports, session, operation, op_payload, jr, user_id, lifecycle_config, validator_config)
+        justify_resolution = jr
+
     # 2. accept — project, score, gate, and assemble the success plan.
     return _accept(
         ports,
@@ -209,6 +257,7 @@ def action_planning_session(
         user_id=user_id,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        justify_resolution=justify_resolution,
     )
 
 
@@ -278,8 +327,17 @@ def _accept(
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],
     validator_config: Mapping[str, Any],
+    justify_resolution: JustifyResolution | None = None,
 ) -> VerbResult:
     _, _, clock = resolve_now(ports)
+
+    # justify/unjustify reuse the update_* mutation machinery: the resolution targets the
+    # entity and carries the merged fieldDeclarations, so the mutation is a SpecMutation SET
+    # on that entity. Effective phase + the audit op stay keyed on the original `operation`.
+    if justify_resolution is not None:
+        mutation_op, mutation_payload = _justify_mutation(justify_resolution)
+    else:
+        mutation_op, mutation_payload = operation, dict(op_payload or {})
 
     # The projection validates the mutated content against the typed records. Malformed
     # content (a wrong-shape array item, an off-enum value the proactive guards did not
@@ -287,7 +345,7 @@ def _accept(
     # opaque INTERNAL error — leaving the agent blind. Catch it and return a clean,
     # field-level denial so the agent can see exactly what to fix and re-send.
     try:
-        projected = ports.operations.apply_mutation(operation, op_payload or {}, spec_full)
+        projected = ports.operations.apply_mutation(mutation_op, mutation_payload, spec_full)
     except (PydanticValidationError, ValueError) as exc:
         return _denied(
             ports, session, operation, op_payload, _content_denial(exc),
@@ -302,7 +360,13 @@ def _accept(
 
     validator_output = ports.validator.validate(projected, effective_phase, validator_config)
 
-    touched = touched_entity_ids(op_payload, effective_phase, session.specification_id)
+    # justify/unjustify touch the resolved entity (its id == spec_id for a spec-justify), so the
+    # touched set comes from the resolution, not the op-name/phase-keyed helper.
+    touched = (
+        [justify_resolution.entity_id]
+        if justify_resolution is not None
+        else touched_entity_ids(op_payload, effective_phase, session.specification_id)
+    )
     gate = evaluate_phase_gate(
         current_phase=effective_phase,
         validator_output=validator_output,
@@ -389,8 +453,8 @@ def _accept(
     )
 
     mutation = resolve_aps_mutation(
-        operation,
-        op_payload,
+        mutation_op,
+        mutation_payload,
         spec_full,
         id_generator=ports.id_generator,
         clock=clock,

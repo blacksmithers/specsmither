@@ -157,23 +157,28 @@ def test_operation_allowed_late_sets_rollback() -> None:
     assert result == Accepted(rollback=True)
 
 
-def test_operation_allowed_field_declarations_only_exempt() -> None:
-    # A late update_* touching ONLY fieldDeclarations is exempt from rollback.
-    result = operation_allowed(
+def test_operation_allowed_late_update_with_field_declarations_still_rolls_back() -> None:
+    # The fieldDeclarations-only carve-out is retired: a late update_* ALWAYS rolls back
+    # (N/A justification is now the dedicated justify/unjustify op, native in every phase).
+    only = operation_allowed(
         "update_ticket",
         PlanningPhase.CROSS_VALIDATION,
         {"id": "t1", "fields": {"fieldDeclarations": {"dependencies": "n/a"}}},
     )
-    assert result == Accepted(rollback=False)
-
-
-def test_operation_allowed_field_declarations_plus_other_not_exempt() -> None:
-    result = operation_allowed(
+    assert only == Accepted(rollback=True)
+    both = operation_allowed(
         "update_ticket",
         PlanningPhase.CROSS_VALIDATION,
         {"id": "t1", "fields": {"fieldDeclarations": {}, "title": "x"}},
     )
-    assert result == Accepted(rollback=True)
+    assert both == Accepted(rollback=True)
+
+
+def test_operation_allowed_justify_is_native_never_rolls_back() -> None:
+    # justify/unjustify are native in every planning phase (structural-neutral).
+    for phase in (PlanningPhase.PLANNING_SPEC, PlanningPhase.CROSS_VALIDATION):
+        assert operation_allowed("justify", phase) == Accepted(rollback=False)
+        assert operation_allowed("unjustify", phase) == Accepted(rollback=False)
 
 
 # --------------------------------------------------------------------------- #

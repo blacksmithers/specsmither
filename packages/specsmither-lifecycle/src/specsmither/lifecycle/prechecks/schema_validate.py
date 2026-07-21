@@ -131,6 +131,19 @@ class _DeleteDependenciesPayload(_Payload):
     dependencyIds: Annotated[list[_NonEmptyStr], Field(min_length=1)]
 
 
+class _JustifyPayload(_Payload):
+    scope: _NonEmptyStr
+    entityId: _NonEmptyStr
+    # reason has no min_length here — the ``justify`` handler enforces the naReason bound
+    # (so the deny is the specific ``justification_too_short``, not a generic schema error).
+    reason: str
+
+
+class _UnjustifyPayload(_Payload):
+    scope: _NonEmptyStr
+    entityId: _NonEmptyStr
+
+
 class _GetPlanningStatusPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -151,6 +164,8 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "unlink_blueprint_to_tickets": _UnlinkBlueprintToTicketsPayload,
     "create_dependencies": _CreateDependenciesPayload,
     "delete_dependencies": _DeleteDependenciesPayload,
+    "justify": _JustifyPayload,
+    "unjustify": _UnjustifyPayload,
     "get_planning_status": _GetPlanningStatusPayload,
 }
 

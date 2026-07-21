@@ -164,6 +164,14 @@ _PLANNING_OP_PAYLOADS: dict[str, dict[str, Any]] = {
         "properties": {"dependencyIds": _STR_ARRAY},
         "required": ["dependencyIds"],
     },
+    "justify": {
+        "properties": {"entityId": _STR, "scope": _STR, "reason": _STR},
+        "required": ["scope", "entityId", "reason"],
+    },
+    "unjustify": {
+        "properties": {"entityId": _STR, "scope": _STR},
+        "required": ["scope", "entityId"],
+    },
     "get_planning_status": {"properties": {}, "required": []},
 }
 

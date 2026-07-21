@@ -30,9 +30,9 @@ P = PlanningPhase
 # --------------------------------------------------------------------------- #
 
 
-def test_registry_has_24_operations() -> None:
-    assert len(OPERATIONS) == 24
-    assert len(PLANNING_MUTATING_OPERATIONS) == 14
+def test_registry_has_26_operations() -> None:
+    assert len(OPERATIONS) == 26
+    assert len(PLANNING_MUTATING_OPERATIONS) == 16
     assert len(PLANNING_READ_ONLY_OPERATIONS) == 1
     assert len(PLANNING_SYNTHETIC_OPERATIONS) == 9
 

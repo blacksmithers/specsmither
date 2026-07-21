@@ -1,11 +1,11 @@
-"""The per-operation phase-guard table — the 15-op registry + classifier.
+"""The per-operation phase-guard table — the 17-op registry + classifier.
 
 Pure: a static
 data table plus two functions, no I/O, no dependencies beyond the
 :class:`~specsmither.domain.enums.PlanningPhase` vocabulary.
 
 :data:`OPERATIONS` maps every :data:`PlanningOperationName` to an
-:class:`OperationDef` (15 real ops: 14 mutating + 1 read-only) or to ``None``
+:class:`OperationDef` (17 real ops: 16 mutating + 1 read-only) or to ``None``
 (the 9 synthetic / audit-only ops, which have no callable definition). Each
 :class:`OperationDef` records the operation's *home* phase (``native_phase``),
 the phases in which it is outright rejected (``forbidden_phases``), an optional
@@ -73,6 +73,8 @@ PlanningOperationName = Literal[
     "unlink_blueprint_to_tickets",
     "create_dependencies",
     "delete_dependencies",
+    "justify",
+    "unjustify",
     # read-only
     "get_planning_status",
     # synthetic / audit-only
@@ -99,7 +101,7 @@ NativePhase = PlanningPhase | Literal["any"]
 OperationCallClass = Literal["forbidden", "native", "late"]
 """Classification of an ``(op, phase)`` call — see :func:`classify_operation_call`."""
 
-#: The 14 mutating planning operations (session-types
+#: The 16 mutating planning operations (session-types
 #: ``PLANNING_MUTATING_OPERATIONS``).
 PLANNING_MUTATING_OPERATIONS: Final[tuple[PlanningOperationName, ...]] = (
     "update_spec",
@@ -116,6 +118,8 @@ PLANNING_MUTATING_OPERATIONS: Final[tuple[PlanningOperationName, ...]] = (
     "unlink_blueprint_to_tickets",
     "create_dependencies",
     "delete_dependencies",
+    "justify",
+    "unjustify",
 )
 
 #: The single read-only planning operation (session-types
@@ -201,7 +205,7 @@ def _phases_before(end: PlanningPhase) -> tuple[PlanningPhase, ...]:
 
 
 # --------------------------------------------------------------------------- #
-# The registry: 15 operations (14 mutating + 1 read-only) + 9 synthetic nulls  #
+# The registry: 17 operations (16 mutating + 1 read-only) + 9 synthetic nulls  #
 # --------------------------------------------------------------------------- #
 
 OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
@@ -392,7 +396,34 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         multi_actor=False,
         description="Delete dependency links between tickets during cross_validation.",
     ),
-    # 15. get_planning_status — any phase, always native, never forbidden.
+    # 15/16. justify / unjustify — the paired N/A-declaration ops. STRUCTURAL-NEUTRAL:
+    #     they change no structural set (no files/deps/bodies), only a
+    #     {value:'N/A',reason} declaration, so like get_planning_status they are native in
+    #     EVERY planning phase and NEVER roll back (native_phase='any'). Valid from
+    #     planning_spec through cross_validation; forbidden only once planned.
+    "justify": OperationDef(
+        name="justify",
+        kind="mutating",
+        native_phase="any",
+        forbidden_phases=(PlanningPhase.PLANNED,),
+        multi_actor=False,
+        description=(
+            "Declare a field N/A with a reason (writes the canonical fieldDeclarations[scope] "
+            "key); structural-neutral, native in every planning phase, never rolls back."
+        ),
+    ),
+    "unjustify": OperationDef(
+        name="unjustify",
+        kind="mutating",
+        native_phase="any",
+        forbidden_phases=(PlanningPhase.PLANNED,),
+        multi_actor=False,
+        description=(
+            "Remove an N/A declaration (clears the canonical fieldDeclarations[scope] key); "
+            "structural-neutral, native in every planning phase, never rolls back."
+        ),
+    ),
+    # 17. get_planning_status — any phase, always native, never forbidden.
     "get_planning_status": OperationDef(
         name="get_planning_status",
         kind="read-only",

@@ -85,3 +85,75 @@ def test_strip_removes_top_level_and_nested_field_declarations() -> None:
 def test_strip_is_a_noop_for_justify() -> None:
     payload = {"entityId": "t1", "scope": "dependencies", "reason": _REASON}
     assert strip_agent_wire_field_declarations("justify", payload) == payload
+
+
+# --- end-to-end through the real dispatcher ----------------------------------------- #
+
+
+def _seed_dispatcher(tmp_path: Path):  # type: ignore[no-untyped-def]
+    import os
+
+    from specsmither.adapters.lifecycle_ports import SqliteSpecStore
+    from specsmither.db.base import make_session_factory
+    from specsmither.db.migrations import init_db
+    from specsmither.dispatch.facade import make_dispatcher
+    from specsmither.operations import crud, workspace
+
+    os.environ.update(
+        SPECSMITHER_DB=str(tmp_path / "db.sqlite"), SPECSMITHER_HOME=str(tmp_path)
+    )
+    init = workspace.init(cwd=str(tmp_path), project_name="jf", env=os.environ)
+    factory = make_session_factory(init_db(os.environ["SPECSMITHER_DB"]))
+    spec = crud.create_specification(factory, project_id=init.project_id, title="JF")
+    epic = crud.create_epic(factory, specification_id=spec.id, title="E1")
+    ticket = crud.create_ticket(factory, epic_id=epic.id, title="T1")
+    disp = make_dispatcher(factory)
+    sid = disp.dispatch("start_planning_session", {"specId": spec.id})["agent_response"][
+        "session_id"
+    ]
+    return disp, factory, SqliteSpecStore, spec.id, ticket.id, sid
+
+
+def _ticket_decls(factory, spec_store_cls, spec_id):  # type: ignore[no-untyped-def]
+    with factory() as session:
+        sf = spec_store_cls(session).get_spec_full(spec_id)
+    return sf.epics[0].tickets[0].extra.get("fieldDeclarations", {})
+
+
+def test_justify_then_unjustify_round_trips_through_the_store(tmp_path: Path) -> None:
+    disp, factory, store_cls, spec_id, ticket_id, sid = _seed_dispatcher(tmp_path)
+
+    ok = disp.dispatch(
+        "action_planning_session",
+        {"sessionId": sid, "operation": "justify",
+         "payload": {"entityId": ticket_id, "scope": "dependencies", "reason": _REASON}},
+    )["agent_response"]
+    assert ok["outcome"] == "success"
+    assert _ticket_decls(factory, store_cls, spec_id).get("dependencies", {}).get("value") == "N/A"
+
+    cleared = disp.dispatch(
+        "action_planning_session",
+        {"sessionId": sid, "operation": "unjustify",
+         "payload": {"entityId": ticket_id, "scope": "dependencies"}},
+    )["agent_response"]
+    assert cleared["outcome"] == "success"
+    assert "dependencies" not in _ticket_decls(factory, store_cls, spec_id)
+
+
+def test_justify_denials_flow_through_the_dispatcher(tmp_path: Path) -> None:
+    disp, _factory, _store, _spec, ticket_id, sid = _seed_dispatcher(tmp_path)
+    del _factory, _store, _spec
+
+    short = disp.dispatch(
+        "action_planning_session",
+        {"sessionId": sid, "operation": "justify",
+         "payload": {"entityId": ticket_id, "scope": "dependencies", "reason": "nope"}},
+    )["agent_response"]
+    assert short["outcome"] == "denied"
+
+    bad_scope = disp.dispatch(
+        "action_planning_session",
+        {"sessionId": sid, "operation": "justify",
+         "payload": {"entityId": ticket_id, "scope": "title", "reason": _REASON}},
+    )["agent_response"]
+    assert bad_scope["outcome"] == "denied"

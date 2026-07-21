@@ -5,12 +5,11 @@ Pure. Delegates the phase decision to
 
 * ``forbidden`` → :class:`Denied` (``current_phase_must_finish_first``).
 * ``native`` → :class:`Accepted` (``rollback=False``).
-* ``late`` → :class:`Accepted` with ``rollback=True`` — the caller is working
-  past the op's native phase, so the APS pipeline rewinds the session — **except**
-  a late ``update_*`` whose payload touches ONLY ``fieldDeclarations``: that is an
-  N/A justification, not a structural body change, and is exempt from rollback
-  (``rollback=False``). The exemption lets an agent declare e.g. ``dependencies``
-  N/A during ``cross_validation`` without being thrown back to ``ticket_expansion``.
+* ``late`` → :class:`Accepted` with ``rollback=True`` — the caller is working past
+  the op's native phase, so the APS pipeline rewinds the session. A late ``update_*``
+  ALWAYS rolls back: N/A justification has its own dedicated, structural-neutral op
+  (``justify`` / ``unjustify``, native in every phase, never rolled back), so a
+  ``fieldDeclarations`` change no longer rides ``update_*`` and needs no carve-out.
 """
 
 from __future__ import annotations
@@ -28,8 +27,6 @@ from specsmither.lifecycle.prechecks.result import Accepted, Denied, PrecheckRes
 
 __all__ = ["operation_allowed"]
 
-_UPDATE_OPS: frozenset[str] = frozenset({"update_spec", "update_epic", "update_ticket"})
-
 
 def operation_allowed(
     op: PlanningOperationName,
@@ -38,8 +35,8 @@ def operation_allowed(
 ) -> PrecheckResult:
     """Classify ``op`` in ``current_phase`` → :class:`Accepted` | :class:`Denied`.
 
-    ``payload`` is consulted only for the ``fieldDeclarations``-only rollback
-    exemption on a late ``update_*``.
+    ``payload`` is accepted for signature compatibility with the pre-check chain; the
+    classification is purely ``(op, phase)``.
     """
 
     classification = classify_operation_call(op, current_phase)
@@ -60,7 +57,7 @@ def operation_allowed(
             },
         )
 
-    rollback = classification == "late" and not _is_field_declarations_only_update(op, payload)
+    rollback = classification == "late"
     if op == "create_ticket" and current_phase == PlanningPhase.TICKET_EXPANSION:
         # structural_create_in_expansion — create_ticket is native to ticket_decomposition,
         # so in the SCORED ticket_expansion phase it lands as a late op that would roll the
@@ -85,22 +82,3 @@ def operation_allowed(
             },
         )
     return Accepted(rollback=rollback)
-
-
-def _is_field_declarations_only_update(
-    op: PlanningOperationName, payload: Mapping[str, Any] | None
-) -> bool:
-    """``True`` iff ``op`` is an ``update_*`` whose ``fields`` are only ``fieldDeclarations``.
-
-    A non-empty ``fields`` map whose every key is ``fieldDeclarations``.
-    """
-
-    if op not in _UPDATE_OPS:
-        return False
-    if not isinstance(payload, Mapping):
-        return False
-    fields = payload.get("fields")
-    if not isinstance(fields, Mapping):
-        return False
-    keys = list(fields.keys())
-    return len(keys) > 0 and all(k == "fieldDeclarations" for k in keys)
