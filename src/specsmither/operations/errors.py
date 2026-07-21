@@ -1,23 +1,22 @@
 """L1 semantic CRUD errors + the SQLite/SQLAlchemy → CrudError bridge.
 
-Clean Python rewrite of ``operations/errors/*`` (the TS ``CrudError`` hierarchy
-+ the L0→L1 ``toCrudError`` bridge). The four CRUD codes — ``NOT_FOUND``,
-``VALIDATION_FAILED``, ``CONFLICT``, ``PRECONDITION_FAILED`` — are the throw site
-the verbs use; :func:`to_crud_error` translates a low-level persistence failure
-(a SQLAlchemy / sqlite3 constraint violation) into the matching semantic error.
+The ``CrudError`` hierarchy + the L0→L1 error bridge. The four CRUD codes —
+``NOT_FOUND``, ``VALIDATION_FAILED``, ``CONFLICT``, ``PRECONDITION_FAILED`` — are
+the throw site the verbs use; :func:`to_crud_error` translates a low-level
+persistence failure (a SQLAlchemy / sqlite3 constraint violation) into the matching
+semantic error.
 
-Faithful-port decisions:
+Design decisions:
 
-* The TS JS-brand hack (``CRUD_ERROR_BRAND`` / ``__sfErrorBrand``, a guard
-  against Lambda-bundle class duplication) is **dropped**. Python has a single
-  class identity per process, so real exception classes + ``isinstance`` are the
-  guard — :func:`isinstance(err, CrudError) <isinstance>` replaces ``isCrudError``.
-* The per-entity ``NotFoundError`` subclasses (``SpecNotFoundError`` … ) and the
-  ``ErrorGuidanceEntityType`` label table are a dispatch/UX nicety, not part of
-  this work item's M0 contract; callers pass an English ``message`` directly.
+* There is no runtime brand marker — Python has a single class identity per
+  process, so real exception classes + ``isinstance`` are the guard:
+  :func:`isinstance(err, CrudError) <isinstance>` is the membership test.
+* Per-entity ``NotFoundError`` subclasses and an entity-label table are a
+  dispatch/UX nicety, not part of the M0 contract; callers pass an English
+  ``message`` directly.
 * The ``conditional-check-failed`` disambiguation (CONFLICT on a create/start
-  verb vs PRECONDITION_FAILED on a transition/reopen verb) is preserved and
-  driven off the ``intent`` argument of :func:`to_crud_error`.
+  verb vs PRECONDITION_FAILED on a transition/reopen verb) is driven off the
+  ``intent`` argument of :func:`to_crud_error`.
 
 Guidance seam (M0 = LIGHT): each error carries an optional ``next_actions``
 (a list of English next-step sentences). The full ``compose*ErrorGuidance``

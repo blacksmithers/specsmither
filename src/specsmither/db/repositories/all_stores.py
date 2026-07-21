@@ -8,10 +8,9 @@ that same session, so all of them share one unit of work (and therefore one
 bag through the verbs, runs the recompute worklist, and commits — the stores
 themselves never own the transaction boundary (architecture §4, invariant 3).
 
-The bag is the SpecSmither analogue of the TS ``StoreBag`` DI object: the same
-attribute surface the operations layer expects, swapped to the SQLite
-implementations. The attribute names are the stable binding contract (L6/L7 depend
-on them):
+The bag is the store DI object: the attribute surface the operations layer expects,
+bound to the SQLite implementations. The attribute names are the stable binding
+contract (L6/L7 depend on them):
 
 * entity stores — ``tickets`` / ``projects`` / ``specifications`` / ``epics`` /
   ``blueprints`` / ``ticket_dependencies``

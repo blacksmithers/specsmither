@@ -1,36 +1,35 @@
-"""Pure in-memory ``OperationsProjector`` (work item #17).
+"""Pure in-memory ``OperationsProjector``.
 
-Port of ``packages/core/src/factory/apply-mutation.ts`` (the production
-``IOperationsLayer``). The planning lifecycle calls :func:`apply_mutation` to
+The planning lifecycle calls :func:`apply_mutation` to
 project the *would-be* post-mutation state of a spec **in memory, without
 persisting**, so the validator/gate can score the spec AS IF the operation had
-already been applied. The real write happens later, via the executor adapter
-(#16), against the stores.
+already been applied. The real write happens later, via the executor adapter,
+against the stores.
 
-Faithful-port notes (the seam differs from SpecForge in one structural way):
+Design notes (one structural characteristic of the projector seam):
 
-* SpecForge's projector clones a ``SpecFull`` wrapper — a nested
+* A projector could clone a ``SpecFull`` wrapper — a nested
   ``Specification`` plus three *flat* side-projections (``epics`` / ``blueprints``
   / ``dependencies``) the lifecycle pre-checks read. SpecSmither's gate is the
   crucible validator, which scores the **nested** :class:`crucible.models.Specification`
   *directly* (it is the single source of truth — exactly what
   :func:`specsmither.domain.records.build_spec_full` recomposes). So here the
-  "flat epics list" and "flat blueprints" the task names are simply
+  "flat epics list" and "flat blueprints" are simply
   ``spec.epics`` / ``spec.blueprints``, and "flat dependencies on tickets" are the
   nested ``ticket.dependencies`` :class:`~crucible.models.DependencyLink`\\ s. The
   projector therefore mutates the nested tree in place and keeps it internally
   consistent by construction (created epics carry ``specification_id``; created
   tickets carry ``epic_id``; dependency links land on the dependent ticket).
 * :func:`project_dependency_edges` is provided as the explicit flat-dependency
-  derivation (the SpecSmither analogue of ``projectFlat``'s ``dependencies``): it
-  is the exact inverse of ``build_spec_full``'s edge→link mapping, so a projected
-  tree's edges line up byte-for-byte with what the persistence path would store.
+  derivation: it is the exact inverse of ``build_spec_full``'s edge→link mapping,
+  so a projected tree's edges line up exactly with what the persistence path
+  would store.
 
 Purity contract: :meth:`OperationsProjector.apply` deep-clones its input
 (``model_copy(deep=True)``), mutates only the clone, and returns it — the caller's
 spec is never touched. No SQLAlchemy / DB / store access whatsoever; this is a
 pure function over crucible models. Projection-synthesized ids are deterministic
-(``__proj_*``, mirroring the TS) so the function stays referentially transparent;
+(``__proj_*``) so the function stays referentially transparent;
 callers may pass an explicit ``id`` to override.
 """
 
@@ -96,7 +95,7 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 #
 # One frozen dataclass per planning mutation kind, discriminated by ``kind``.
-# This is a representative, faithful subset of the apply-mutation cases; the full
+# This is a representative subset of the apply-mutation cases; the full
 # 15-op planning registry (0.1.0) is the consumer that dispatches these. Update
 # ops carry a ``fields`` map keyed by **snake_case** model attribute names (the
 # Pythonic field names, not the camelCase wire aliases).
@@ -241,10 +240,9 @@ class CreateDependencies:
 class DeleteDependencies:
     """Remove one or more dependency edges by ``(from, to)`` pair (``delete_dependencies``).
 
-    Unlike the SpecForge projector (which left state unchanged because its nested
-    ``DependencyLink`` has no edge id), SpecSmither edges are identified by the
-    ``(dependent, depended-on)`` pair — the persisted ``UNIQUE(ticket_id,
-    depends_on_id)`` key — so the removal projects faithfully here.
+    SpecSmither edges are identified by the ``(dependent, depended-on)`` pair —
+    the persisted ``UNIQUE(ticket_id, depends_on_id)`` key — so the removal
+    projects cleanly in memory.
     """
 
     dependencies: Sequence[DependencyEdgeSpec] = ()
@@ -336,9 +334,8 @@ def project_dependency_edges(spec: Specification) -> list[DependencyEdge]:
     The exact inverse of :func:`specsmither.domain.records.build_spec_full`'s
     edge→link mapping: a :class:`~crucible.models.DependencyLink` with
     ``ticket_id == Y`` on ticket ``X`` becomes ``DependencyEdge(ticket_id=X,
-    depends_on_id=Y)``. (No direction flip by ``type`` — that is a SpecForge
-    lifecycle-graph concern; SpecSmither's persisted edge keeps the dependent as
-    ``ticket_id`` regardless of ``requires``/``blocks``.)
+    depends_on_id=Y)``. (No direction flip by ``type``; SpecSmither's persisted
+    edge keeps the dependent as ``ticket_id`` regardless of ``requires``/``blocks``.)
     """
     edges: list[DependencyEdge] = []
     for epic in spec.epics:
@@ -542,10 +539,9 @@ def _snake_fields(raw: Mapping[str, Any]) -> dict[str, Any]:
 def _build_mutation_op(op: str, payload: Mapping[str, Any]) -> MutationOp | None:
     """Map a lifecycle op name + camelCase payload to its :data:`MutationOp`, or ``None``.
 
-    ``None`` means "no faithful in-memory projection": ``delete_dependencies`` carries
+    ``None`` means "no in-memory projection": ``delete_dependencies`` carries
     opaque edge ids (``dependencyIds``) the nested tree cannot resolve to ``(from, to)``
-    pairs — the projection is a no-op, matching the SpecForge projector's
-    unchanged-on-remove behaviour. An unknown op name is likewise a no-op.
+    pairs — the projection is a no-op. An unknown op name is likewise a no-op.
     """
     if op == "update_spec":
         return UpdateSpec(fields=_snake_fields(payload.get("fields", {})))
@@ -616,7 +612,7 @@ class ProjectorOperationsLayer:
     def apply_mutation(self, op: str, payload: Mapping[str, Any], spec_full: SpecFull) -> SpecFull:
         mutation = _build_mutation_op(op, payload)
         if mutation is None:
-            # No faithful in-memory projection (e.g. delete by opaque edge id) →
+            # No in-memory projection (e.g. delete by opaque edge id) →
             # rebuild from the unchanged spec so the return shape stays consistent.
             return _spec_full_from_spec(spec_full.spec)
         projected = apply_mutation(spec_full.spec, mutation)

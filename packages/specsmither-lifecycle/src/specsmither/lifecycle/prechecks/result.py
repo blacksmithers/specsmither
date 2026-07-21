@@ -1,9 +1,7 @@
 """The shared pre-check result type — :class:`Accepted` | :class:`Denied`.
 
-Every planning pre-check (A1 §1.4) is a **pure** function that returns a
-:data:`PrecheckResult`. The TS source modelled this as two tiny interfaces
-(``PreCheckAccepted{accepted:true}`` / ``PreCheckDenied{denied:true, reason,
-details}``); this port collapses them into a frozen-dataclass union with richer,
+Every planning pre-check is a **pure** function that returns a
+:data:`PrecheckResult`. This is a frozen-dataclass union with rich,
 English-first semantics so the L4 (APS / CPS) pipeline can build a denial
 envelope without re-deriving prose:
 
@@ -11,11 +9,10 @@ envelope without re-deriving prose:
   ``rollback`` (a *late* op rewinds the session to its native phase) and
   ``auto_transition`` (SPS on a ``draft`` spec must flip it to ``planning``).
   A bare :class:`Accepted` (both ``False``) is the common case.
-* :class:`Denied` carries a stable machine ``code`` (the TS ``reason``), a
-  fully-rendered English ``message`` (read verbatim by clients — never parsed),
-  an optional structured ``context`` bag (the TS ``details``, snake-cased), and
-  an optional ``blockers`` list (the per-finding gate prose surfaced by the CPS
-  gate / the dependency-batch cycle paths).
+* :class:`Denied` carries a stable machine ``code``, a fully-rendered English
+  ``message`` (read verbatim by clients — never parsed), an optional structured
+  ``context`` bag, and an optional ``blockers`` list (the per-finding gate prose
+  surfaced by the CPS gate / the dependency-batch cycle paths).
 
 The union is closed: a pre-check returns exactly one of the two.
 """
@@ -58,11 +55,10 @@ class Accepted:
 class Denied:
     """A pre-check rejected the call.
 
-    ``code`` is the stable machine identifier (the TS ``reason``); ``message`` is
-    the rendered English prose; ``context`` is the optional structured metadata
-    bag (the TS ``details``, snake-cased and JSON-serialisable); ``blockers`` is
-    the optional list of human-readable blocking reasons (the CPS gate's failing
-    findings, or the dependency-batch cycle paths).
+    ``code`` is the stable machine identifier; ``message`` is the rendered English
+    prose; ``context`` is the optional structured metadata bag (snake-cased and
+    JSON-serialisable); ``blockers`` is the optional list of human-readable blocking
+    reasons (the CPS gate's failing findings, or the dependency-batch cycle paths).
     """
 
     code: str

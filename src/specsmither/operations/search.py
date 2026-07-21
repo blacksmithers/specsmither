@@ -1,18 +1,15 @@
-"""Unified ticket search — work item #20 (port of ``operations/search.ts``).
+"""Unified ticket search — the ``search_tickets`` primitive.
 
-SpecSmither keeps the TS ``searchTickets`` behaviour **verbatim** but runs it as a
-load-scope-then-score-in-Python pipeline (decision 3: NO authoritative FTS5). The
-seam against the TS is purely the scope load (DynamoDB stores → the SQLite
-``*StoreSqlite`` repositories) and the dropped multi-user auth (``userId`` /
-``requireProjectAccess`` / ``sharingStore`` disappear with the single local user).
-Everything else — substring matching, glob→regex, tag AND/OR, ``relatedTo``
-similarity, the additive relevance weights, the sort and the pagination — is the
-same logic, reproduced so a differential test against the TS passes.
+SpecSmither runs search as a load-scope-then-score-in-Python pipeline (decision 3:
+NO authoritative FTS5). The scope load reads the SQLite ``*StoreSqlite``
+repositories; there is no multi-user auth (single local user). Substring matching,
+glob→regex, tag AND/OR, ``relatedTo`` similarity, the additive relevance weights,
+the sort and the pagination all run over the loaded scope.
 
-Why substring, not full-text: the TS matches with JS ``String.includes`` (a
-case-insensitive **substring** test), not tokenised/prefix matching. FTS5 would
-silently drop matches like ``"thenti"`` inside ``"authentication"``; a SQL
-``LOWER(col) LIKE '%?%'`` prefilter or a Python ``in`` test is the only faithful
+Why substring, not full-text: matching is a case-insensitive **substring** test
+(``String.includes`` semantics), not tokenised/prefix matching. FTS5 would silently
+drop matches like ``"thenti"`` inside ``"authentication"``; a SQL
+``LOWER(col) LIKE '%?%'`` prefilter or a Python ``in`` test is the only correct
 option. We do the membership test (and all scoring) in Python.
 
 Two entry points:
@@ -56,7 +53,7 @@ __all__ = [
     "search_tickets",
 ]
 
-# Default pagination window (TS: `limit = 20`, `offset = 0`).
+# Default pagination window (`limit = 20`, `offset = 0`).
 _DEFAULT_LIMIT = 20
 
 
@@ -67,13 +64,13 @@ _DEFAULT_LIMIT = 20
 
 @dataclass(frozen=True)
 class SearchTicket:
-    """A ticket flattened into the searchable surface (TS ``TicketInScope``).
+    """A ticket flattened into the searchable surface.
 
     ``files`` is the **union of all four planned file-change kinds**
     (created / modified / deleted / referenced) — "which tickets touch this path",
-    regardless of how — mirroring the TS, which hydrates ``files`` from the union of
-    the ``TicketFileChange`` hasMany. ``status`` / ``complexity`` are the plain
-    string values (``complexity`` absent ⇒ ``None``, treated as ``""`` by the filter).
+    regardless of how — hydrated from the union of the ticket's file-change
+    associations. ``status`` / ``complexity`` are the plain string values
+    (``complexity`` absent ⇒ ``None``, treated as ``""`` by the filter).
     """
 
     id: str
@@ -89,9 +86,9 @@ class SearchTicket:
 
 @dataclass(frozen=True)
 class SearchTicketItem:
-    """One scored hit (TS ``SearchTicketItem``).
+    """One scored hit.
 
-    The optional fields mirror the TS conditional-include: ``complexity`` is
+    The optional fields are conditionally included: ``complexity`` is
     ``None`` when the ticket has none; ``relevance_score`` is ``None`` when the
     accumulated score is ``0``; ``matched_files`` / ``match_reason`` are ``None``
     when empty.
@@ -111,10 +108,10 @@ class SearchTicketItem:
 
 @dataclass(frozen=True)
 class SearchFilters:
-    """Echo of the active filters (TS ``UnifiedSearchResult.filters``).
+    """Echo of the active filters.
 
-    A field is ``None`` when its filter was not supplied — the same
-    conditional-include the TS does when assembling the response object.
+    A field is ``None`` when its filter was not supplied — conditionally included
+    when assembling the response object.
     """
 
     query: str | None = None
@@ -128,7 +125,7 @@ class SearchFilters:
 
 @dataclass(frozen=True)
 class SearchResult:
-    """The unified search response (TS ``UnifiedSearchResult``)."""
+    """The unified search response."""
 
     tickets: list[SearchTicketItem]
     total: int
@@ -137,19 +134,19 @@ class SearchResult:
 
 
 # ---------------------------------------------------------------------------
-# Glob → regex  (port of `matchGlob`, verbatim semantics)
+# Glob → regex
 # ---------------------------------------------------------------------------
 
-# The regex specials the TS escapes before translating the glob wildcards:
+# The regex specials escaped before translating the glob wildcards:
 # `. + ^ $ { } ( ) | [ ] \` — note `*` and `?` are deliberately NOT here (they are
 # the glob wildcards handled next).
 _REGEX_SPECIALS = re.compile(r"[.+^${}()|\[\]\\]")
 
 
 def _glob_to_regex(pattern: str) -> str:
-    """Translate a shell-glob into an anchored regex body (TS escape/replace chain).
+    """Translate a shell-glob into an anchored regex body (escape/replace chain).
 
-    Order matters and matches the TS exactly: escape regex specials, protect ``**``
+    Order matters: escape regex specials, protect ``**``
     (globstar) behind a sentinel, turn ``*`` into ``[^/]*`` (a single path segment)
     and ``?`` into ``[^/]`` (one non-slash char), then expand the globstar sentinel
     to ``.*`` (crosses path separators).
@@ -164,13 +161,13 @@ def _glob_to_regex(pattern: str) -> str:
 
 
 def match_glob(pattern: str, text: str) -> bool:
-    """Return whether *text* matches shell-glob *pattern* (port of ``matchGlob``).
+    """Return whether *text* matches shell-glob *pattern*.
 
     Three path-prefix short-circuits run first (exact equality; a trailing-``/``
     directory prefix; a ``pattern + '/'`` directory prefix), then the glob is
     converted to an anchored regex (``^…$`` ≡ :func:`re.fullmatch`). ``*`` stays
     within one path segment, ``?`` is a single non-slash char, and ``**`` crosses
-    separators. A malformed regex fails closed (``False``), as the TS ``try/catch`` does.
+    separators. A malformed regex fails closed (``False``).
     """
     if text == pattern:
         return True
@@ -185,7 +182,7 @@ def match_glob(pattern: str, text: str) -> bool:
 
 
 def _match_files_with_patterns(ticket_files: Sequence[str], patterns: Sequence[str]) -> list[str]:
-    """Every ticket file matching at least one pattern (TS ``matchFilesWithPatterns``)."""
+    """Every ticket file matching at least one pattern."""
     matched: list[str] = []
     for file in ticket_files:
         for pattern in patterns:
@@ -196,7 +193,7 @@ def _match_files_with_patterns(ticket_files: Sequence[str], patterns: Sequence[s
 
 
 # ---------------------------------------------------------------------------
-# Relevance scoring  (ports of `calculateRelevance` / `calculateRelatedScore`)
+# Relevance scoring
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +204,7 @@ def _calculate_relevance(
     title: str,
     description: str | None,
 ) -> int:
-    """Additive query relevance (TS ``calculateRelevance``).
+    """Additive query relevance.
 
     Per-term hits: title ``×10``, description ``×3``. Then full-phrase bonuses: the
     joined query inside the title ``+20``, inside the description ``+10``, and every
@@ -227,7 +224,7 @@ def _calculate_relevance(
 
 
 def _calculate_related_score(ticket: SearchTicket, source: SearchTicket) -> tuple[int, list[str]]:
-    """``relatedTo`` similarity (TS ``calculateRelatedScore``).
+    """``relatedTo`` similarity.
 
     Shared files ``×10`` (exact path match), shared tags ``×5`` (case-insensitive),
     same epic ``+15``. Returns the score and the human-readable match reasons.
@@ -260,7 +257,7 @@ def _calculate_related_score(ticket: SearchTicket, source: SearchTicket) -> tupl
 
 
 def _normalize_query(query: str | None) -> str | None:
-    """Trim *query*; an empty/whitespace string collapses to ``None`` (TS ``trim`` + truthiness)."""
+    """Trim *query*; an empty/whitespace string collapses to ``None``."""
     if query is None:
         return None
     return query.strip() or None
@@ -269,7 +266,7 @@ def _normalize_query(query: str | None) -> str | None:
 def _validate_scope(
     project_id: str | None, specification_id: str | None, epic_id: str | None
 ) -> None:
-    """Require one of project / specification / epic (TS scope guard)."""
+    """Require one of project / specification / epic (scope guard)."""
     if project_id is None and specification_id is None and epic_id is None:
         raise ValidationFailedError("One of projectId, specificationId, or epicId is required.")
 
@@ -280,7 +277,7 @@ def _validate_filters(
     tags: Sequence[str] | None,
     related_to: str | None,
 ) -> None:
-    """Require at least one of query / files / tags / relatedTo (TS filter guard)."""
+    """Require at least one of query / files / tags / relatedTo (filter guard)."""
     if not (query or files or tags or related_to):
         raise ValidationFailedError(
             "At least one filter is required: query, files, tags, or relatedTo"
@@ -307,7 +304,7 @@ def _score_ticket(
 ) -> SearchTicketItem | None:
     """Apply every AND-combined filter to one ticket; ``None`` ⇒ filtered out.
 
-    Each failed filter short-circuits (the TS ``continue``). Surviving tickets carry
+    Each failed filter short-circuits. Surviving tickets carry
     the accumulated relevance + match reasons.
     """
     if status and ticket.status not in status:
@@ -390,7 +387,7 @@ def _execute(
     """Run the filter → score → sort → paginate pipeline over an already-scoped list.
 
     Assumes *query* is normalized and validation has run. Sorting by relevance is
-    applied only when ``query`` or ``related_to`` is active (TS), and is made
+    applied only when ``query`` or ``related_to`` is active, and is made
     explicitly deterministic by carrying the scope index as the tiebreak (a stable
     sort over the already-deterministic scope order).
     """
@@ -498,8 +495,8 @@ def run_search(
 def _record_to_search_ticket(record: TicketRecord) -> SearchTicket:
     """Flatten a hydrated :class:`TicketRecord` into a :class:`SearchTicket`.
 
-    ``files`` is the union of the four ``files_to_be_*`` arrays (the TS file-change
-    union); enums are unwrapped to their plain string ``value``.
+    ``files`` is the union of the four ``files_to_be_*`` arrays; enums are unwrapped
+    to their plain string ``value``.
     """
     files = (
         *record.files_to_be_created,
@@ -521,7 +518,7 @@ def _record_to_search_ticket(record: TicketRecord) -> SearchTicket:
 
 
 def _load_source_ticket(stores: AllStores, ticket_id: str) -> SearchTicket:
-    """Load the ``relatedTo`` source ticket (TS ``getSourceTicketForRelated``).
+    """Load the ``relatedTo`` source ticket.
 
     Loaded independently of the search scope — the source may live outside it. A
     missing id raises :class:`~specsmither.operations.errors.NotFoundError`.
@@ -541,10 +538,9 @@ def _load_tickets_in_scope(
 ) -> list[SearchTicket]:
     """Resolve the epic / specification / project scope to a flat ticket list.
 
-    Precedence epic → specification → project (TS ``getTicketsInScope``). The scope
-    anchor must exist — ``get_epic`` / ``get_specification`` / ``get_project`` raise
-    :class:`~specsmither.operations.errors.NotFoundError` when it does not, matching
-    the TS ``*NotFoundError`` throws.
+    Precedence epic → specification → project. The scope anchor must exist —
+    ``get_epic`` / ``get_specification`` / ``get_project`` raise
+    :class:`~specsmither.operations.errors.NotFoundError` when it does not.
     """
     if epic_id is not None:
         stores.epics.get_epic(epic_id)  # existence check (raises NotFoundError)
@@ -583,7 +579,7 @@ def search_tickets(
     limit: int = _DEFAULT_LIMIT,
     offset: int = 0,
 ) -> SearchResult:
-    """Search tickets within a scope (port of ``searchTickets``; the DB entry).
+    """Search tickets within a scope (the DB entry).
 
     Validates that a scope and at least one filter are supplied, then — inside a
     short-lived **read** session (no recompute; reads never mutate derived state) —

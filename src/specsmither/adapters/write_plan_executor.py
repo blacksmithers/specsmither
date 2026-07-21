@@ -1,25 +1,23 @@
-"""WritePlan executor — work item #16 (the lifecycle ⇄ persistence seam).
+"""WritePlan executor — the lifecycle ⇄ persistence seam.
 
-A faithful port of SpecForge's
-``packages/resolvers/src/executor/write-plan-executor.ts`` (``mapItem`` kind→row
-dispatch + ``run-chunks.ts``), **rewritten to one SQLite ``Session.begin()``** per
-the SpecSmither architecture (decision 2, invariant 3).
+A kind→row dispatch (``map_item``) plus a chunked runner, **built around one SQLite
+``Session.begin()``** per the SpecSmither architecture (decision 2, invariant 3).
 
-What is DROPPED versus the TS original (all DynamoDB transport artifacts, per recon
-A4 §1/§5): the ``transactions[][]`` chunker (DynamoDB's 100-item transactWrite cap),
-the ``changes: ModelChange[]`` AppSync-subscription fan-out, the
-``conditionExpression`` / idempotency ``attribute_exists`` guards, the
-``ConcurrencyError`` / ``PartialWritePlanFailure`` taxonomy, and the cascade-reader
-expansion (FK ``ON DELETE CASCADE`` does the work locally). What is KEPT is the only
-logical content: ``mapItem``'s 13-kind dispatch, re-expressed as ORM writes.
+Because this executor targets SQLite directly, it carries none of the distributed-store
+transport machinery a DynamoDB-style backend would need: there is no ``transactions[][]``
+chunker (no 100-item transactWrite cap), no ``ModelChange[]`` subscription fan-out, no
+``conditionExpression`` / ``attribute_exists`` idempotency guards, no
+``ConcurrencyError`` / ``PartialWritePlanFailure`` taxonomy, and no cascade-reader
+expansion (FK ``ON DELETE CASCADE`` does the work locally). All that remains is the
+logical content: the 13-kind item dispatch, expressed as ORM writes.
 
 Shape:
 
 * A :class:`WritePlan` is an ordered ``list[WritePlanItem]`` + a ``description``.
 * :data:`WritePlanItem` is a tagged union — one frozen dataclass per kind,
-  discriminated by a ``kind`` literal — over the 13 kinds in ``write-plan.ts``.
+  discriminated by a ``kind`` literal — over the 13 write-plan kinds.
 * ``fields`` / ``item`` / ``key`` dict keys are ORM column (attribute) names in our
-  internal **snake_case** convention; a camelCase key from a TS-shaped producer is
+  internal **snake_case** convention; a camelCase key from an upstream producer is
   normalised via :func:`to_snake` before it is matched against the model's columns.
 
 The contract (architecture invariant 3): :func:`apply_write_plan` mutates ORM rows,
@@ -270,7 +268,7 @@ def _add(affected: set[str], spec_id: str | None) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# derived context (fills scoreDatapointAppend from sibling items, TS parity)    #
+# derived context (fills scoreDatapointAppend from sibling items)               #
 # --------------------------------------------------------------------------- #
 
 
@@ -282,8 +280,7 @@ class _Context:
 
 def _derive_context(plan: WritePlan, generated_at: str | None) -> _Context:
     """Scrape ``planning_session_id`` + ``recorded_at`` from sibling action/session
-    items, mirroring the TS ``deriveContext`` — ``scoreDatapointAppend`` carries no
-    session metadata of its own."""
+    items — ``scoreDatapointAppend`` carries no session metadata of its own."""
     planning_session_id: str | None = None
     recorded_at: str | None = None
     for item in plan.items:
@@ -323,7 +320,7 @@ def _put_row(
 
 
 # --------------------------------------------------------------------------- #
-# per-kind dispatch (the rewritten ``mapItem``)                                 #
+# per-kind dispatch (item → ORM write)                                          #
 # --------------------------------------------------------------------------- #
 
 
@@ -336,9 +333,9 @@ def _apply_item(
         row = session.get(model, item.entity_id)
         fields = _filtered(model, item.fields)
         if row is None:
-            # specMutation is upsert-by-entity (write-plan.ts): INSERT when the row
-            # is absent (an APS create op) and UPDATE when present. The create plan
-            # carries the full required column set.
+            # specMutation is upsert-by-entity: INSERT when the row is absent (a create
+            # op) and UPDATE when present. The create plan carries the full required
+            # column set.
             row = model(**{**fields, "id": item.entity_id})
             session.add(row)
             session.flush()  # make the row resolvable for _spec_id_for_entity.

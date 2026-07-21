@@ -1,6 +1,6 @@
 """The planning state machine — phase order + linear-transition helpers.
 
-Verbatim port of ``planning/state-machine.ts`` (A1 §1.1). Pure: no I/O, no
+Pure: no I/O, no
 dependencies beyond the :class:`~specsmither.domain.enums.PlanningPhase`
 vocabulary.
 
@@ -28,8 +28,7 @@ __all__ = [
     "phase_index",
 ]
 
-#: The seven planning phases in execution order. Mirrors the TS
-#: ``PHASE_ORDER`` constant (state-machine.ts:7-10).
+#: The seven planning phases in execution order.
 PHASE_ORDER: tuple[PlanningPhase, ...] = (
     PlanningPhase.PLANNING_SPEC,
     PlanningPhase.EPIC_DECOMPOSITION,
@@ -44,9 +43,9 @@ PHASE_ORDER: tuple[PlanningPhase, ...] = (
 def phase_index(phase: PlanningPhase) -> int:
     """Return the 0-based position of ``phase`` in :data:`PHASE_ORDER`, or ``-1``.
 
-    Mirrors ``PHASE_ORDER.indexOf(phase)``. Every :class:`PlanningPhase` member
-    is present in :data:`PHASE_ORDER`, so ``-1`` is unreachable for a valid enum
-    value; the branch is kept for faithful parity with the TS ``indexOf``.
+    Every :class:`PlanningPhase` member is present in :data:`PHASE_ORDER`, so
+    ``-1`` is unreachable for a valid enum value; the branch is kept as a
+    defensive fallback.
     """
 
     try:
@@ -59,7 +58,7 @@ def next_phase(phase: PlanningPhase) -> PlanningPhase | None:
     """Return the phase after ``phase``, or ``None`` past the end.
 
     ``None`` when ``phase`` is the last phase (``planned``) or is not a
-    recognised phase value. Linear ``index + 1`` (state-machine.ts:16-20).
+    recognised phase value. Linear ``index + 1``.
     """
 
     idx = phase_index(phase)
@@ -73,8 +72,7 @@ def is_terminal_phase(phase: PlanningPhase) -> bool:
 
     That is ``cross_validation`` — **not** ``planned``. After the human approves
     at ``cross_validation`` the session closes and the spec transitions to
-    ``ready``; ``planned`` is a sentinel marker, never an actionable phase
-    (state-machine.ts:27-29).
+    ``ready``; ``planned`` is a sentinel marker, never an actionable phase.
     """
 
     return phase == PlanningPhase.CROSS_VALIDATION
@@ -84,7 +82,7 @@ def is_later_phase(phase: PlanningPhase, than: PlanningPhase) -> bool:
     """Return ``True`` when ``phase`` appears later than ``than`` in the order.
 
     Drives late-op rollback: an operation native to an earlier phase than the
-    session's current phase rewinds the session (state-machine.ts:37-39).
+    session's current phase rewinds the session.
     """
 
     return phase_index(phase) > phase_index(than)

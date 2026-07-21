@@ -1,15 +1,13 @@
-"""Phase-transition row builder (``audit/transition-builder.ts``).
+"""Phase-transition row builder.
 
 A **pure** factory for the ``planning_phase_transitions`` row payload that an L4
 verb wraps in a :class:`~specsmither.adapters.write_plan_executor.RecordTransition`
 WritePlan item. The M0 executor's ``_filtered`` lands the snake_case keys onto the
 ORM columns and coerces any enum value to its ``.value`` string.
 
-SpecSmither divergences from the TS ``PlanningPhaseTransition`` shape (recon A6,
-``db/models/planning.py``): the cloud-only ``triggeredByUserId`` / ``notes`` fields
-are dropped (single local user, no per-transition prose), an ``actor`` column is
-added (who drove the transition), and the TS ``triggeredAt`` maps to ``created_at``
-(the append-only timestamp).
+The persisted transition shape (``db/models/planning.py``) carries no per-user or
+per-transition prose (single local user); an ``actor`` column records who drove the
+transition, and ``created_at`` is the append-only timestamp.
 """
 
 from __future__ import annotations
@@ -49,13 +47,13 @@ def build_transition(
     id_generator: IdGenerator | None = None,
     clock: Clock | None = None,
 ) -> dict[str, Any]:
-    """Build a ``planning_phase_transitions`` row dict (``buildTransition``, lines 14-25).
+    """Build a ``planning_phase_transitions`` row dict.
 
     The returned dict is the payload for a ``RecordTransition`` WritePlan item. ``id``
-    is a fresh ULID (or ``id_generator()``); ``created_at`` (the TS ``triggeredAt``)
-    is an ISO-8601 string from ``now_iso`` (or ``clock()``, injected for determinism).
-    ``from_phase`` / ``to_phase`` / ``trigger`` / ``actor`` are stored as their
-    verbatim enum ``.value`` strings.
+    is a fresh ULID (or ``id_generator()``); ``created_at`` is an ISO-8601 string from
+    ``now_iso`` (or ``clock()``, injected for determinism). ``from_phase`` /
+    ``to_phase`` / ``trigger`` / ``actor`` are stored as their plain enum ``.value``
+    strings.
     """
 
     return {

@@ -1,28 +1,26 @@
-"""Rich per-field guidance renderer — SpecForge's ``field_instruction`` catalog, ported.
+"""Rich per-field guidance renderer — the ``field_instruction`` catalog.
 
 0.1.0 shipped a deliberately-minimal English guidance composer (see
 :mod:`specsmither.lifecycle.guidance.compose`). An LLM actor could not drive the planning
 spec to a passing gate from that terse prose because it never saw the per-field
 requirements: shape, required/optional, minimum count, N/A-eligibility (and the exact
-``fieldDeclarations`` syntax used to declare it), tier, or worked examples. SpecForge's
-simulator succeeded precisely because its guidance rendered a RICH per-field catalog. This
-module ports that renderer so the same rich block feeds the SpecSmither actor.
+``fieldDeclarations`` syntax used to declare it), tier, or worked examples. A rich
+per-field catalog is what lets an actor drive the spec to a passing gate. This
+module renders that rich block for the SpecSmither actor.
 
-Ported from (SpecForge lineage, **M8.6.1** — "fields-to-fill are delivered through the
-PROSE, never a wire payload"):
+The renderer has two parts, both delivering fields-to-fill through the PROSE,
+never a wire payload:
 
-* ``packages/lifecycle/src/planning/process-guidance/compose-field-instructions.ts`` —
-  the ``renderField`` / ``naClause`` / ``composeFieldInstructions`` renderer and the
-  ``field_instruction`` template body (``packages/lifecycle/catalogs/templates.yaml``).
-* ``packages/lifecycle/src/planning/lifecycle-planning-guidance/compose-fields-to-fill.ts``
-  — ``composeFieldsToFill`` + ``detectFieldState`` (missing / partial / complete from the
-  current spec snapshot + ``minCount``), plus the ``buildFieldsBlock`` helper of
-  ``compose-phase-intro.ts`` (which excludes ``autoPopulated`` system-set fields).
+* ``renderField`` / ``naClause`` / ``composeFieldInstructions`` — the per-field
+  renderer and the ``field_instruction`` template body.
+* ``composeFieldsToFill`` + ``detectFieldState`` (missing / partial / complete from
+  the current spec snapshot + ``minCount``), plus the ``buildFieldsBlock`` helper
+  (which excludes ``autoPopulated`` system-set fields).
 
-The per-field block is reproduced byte-for-byte with SpecForge's ``renderField`` output —
-including the two-space template indent that lands the first interview-hook line at eight
-columns and the blank lines a field with no ``minCount``/``tier`` leaves before *Examples*.
-The phase header is the SpecSmither single-newline variant of the ``phase_intro`` template.
+The per-field block's exact layout matters — including the two-space template indent
+that lands the first interview-hook line at eight columns and the blank lines a field
+with no ``minCount``/``tier`` leaves before *Examples*. The phase header is the
+SpecSmither single-newline variant of the ``phase_intro`` template.
 """
 
 from __future__ import annotations
@@ -142,7 +140,7 @@ def _parse_field(raw: Mapping[str, Any]) -> _FieldEntry:
 
 
 # --------------------------------------------------------------------------- #
-# Field-state detection (compose-fields-to-fill.ts detectFieldState)           #
+# Field-state detection (detectFieldState)                                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -150,8 +148,8 @@ def _field_state(field: _FieldEntry, snapshot: Mapping[str, Any]) -> _FieldState
     """State of ``field`` against the flat ``snapshot`` (the ``composeFieldsToFill`` lookup).
 
     The snapshot is probed by the dot-stripped key first (``epic.scope.inScope`` →
-    ``scope.inScope``) then by the full field id, mirroring the TS ``?.[fieldKey] ??
-    ?.[entry.field]`` coalescing (only a *missing* first key falls through).
+    ``scope.inScope``) then by the full field id — a coalescing lookup where only a
+    *missing* first key falls through.
     """
 
     stripped = field.field.split(".", 1)[1] if "." in field.field else field.field
@@ -178,7 +176,7 @@ def _detect_field_state(value: Any, field: _FieldEntry) -> _FieldState:
 
 
 # --------------------------------------------------------------------------- #
-# Per-field rendering (compose-field-instructions.ts renderField / naClause)   #
+# Per-field rendering (renderField / naClause)                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -191,7 +189,7 @@ def _bullet(items: Sequence[str], indent: str = "      ") -> str:
 
 
 def _na_clause(field: _FieldEntry) -> str:
-    """The field-level N/A instruction (``naClause`` — the real M8.6.3 mechanism)."""
+    """The field-level N/A instruction (``naClause``)."""
 
     if not field.na_eligible:
         return "Not N/A-eligible — must be filled."
@@ -204,7 +202,7 @@ def _na_clause(field: _FieldEntry) -> str:
 
 
 def _render_field(field: _FieldEntry) -> str:
-    """Render one field via the ``field_instruction`` template body (byte-exact)."""
+    """Render one field via the ``field_instruction`` template body."""
 
     required_label = "(required)" if field.required else "(optional)"
     min_count_clause = (
@@ -256,7 +254,7 @@ def compose_field_instructions(
     if catalog is None:
         return ""
 
-    # buildFieldsBlock (M8.6.6): exclude system-set fields the agent never fills.
+    # buildFieldsBlock: exclude system-set fields the agent never fills.
     fields = [field for field in catalog.fields if not field.auto_populated]
     if spec_snapshot is not None:
         fields = [

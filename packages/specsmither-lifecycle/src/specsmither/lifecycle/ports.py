@@ -1,6 +1,5 @@
 """The lifecycle seam — ports (Protocols) + the data contracts they exchange.
 
-Faithful port of ``lifecycle/ports.ts`` + ``lifecycle/types.ts`` (A1 §3.1, §5).
 This module is the contract every verb, pre-check, gate, and adapter depends on;
 it is **pure** — typing :class:`~typing.Protocol`\\ s and frozen dataclasses, with
 **no concrete implementations**. The concrete SQLite stores / crucible validator /
@@ -13,16 +12,16 @@ What the seam carries
 * :class:`ValidatorOutput` — *the* contract the crucible validator adapter must
   satisfy. The lifecycle only ever reads ``gate_result``, ``local_score``,
   ``per_epic_score[id]``, ``per_ticket_score[id]`` and ``findings`` (message +
-  ``entity_id`` for hint grouping); it never inspects scoring internals (A1 §3.1).
+  ``entity_id`` for hint grouping); it never inspects scoring internals.
 * :class:`SpecFull` — the read contract the spec store produces. ``spec`` is the
   nested crucible :class:`~crucible.models.Specification` fed straight to the
   validator/gate (it is the single source of truth, exactly what
   :func:`specsmither.domain.records.build_spec_full` recomposes). The flat
   ``epics`` / ``blueprints`` / ``dependencies`` side-projections power the
-  cascade-rules / cross-cut / batch-cycle pre-checks (A1 §5).
+  cascade-rules / cross-cut / batch-cycle pre-checks.
 
-The ports (method names mirror the TS, snake_cased; **sync** — the ``Promise``
-wrappers drop because the engine is fully deterministic, no async I/O):
+The ports are snake_cased and **sync** — the engine is fully deterministic, with
+no async I/O:
 
 * :class:`PlanningSessionStore` — read planning-session rows.
 * :class:`SpecStore` — read spec state (flat + recomposed ``SpecFull``).
@@ -79,8 +78,8 @@ __all__ = [
 # Injected-callable port aliases                                              #
 # --------------------------------------------------------------------------- #
 
-#: The now-provider (``ports.clock``). Injected for determinism; mirrors the TS
-#: ``clock?: () => Date``.
+#: The now-provider (``ports.clock``). Injected for determinism; an optional
+#: ``() -> datetime``.
 Clock = Callable[[], datetime]
 
 #: The id minter (``ports.idGenerator``). Must produce a monotonic **ULID** — the
@@ -94,20 +93,19 @@ PersistWritePlan = Callable[[WritePlan], None]
 
 
 # --------------------------------------------------------------------------- #
-# Validator output contract (types.ts:8-26)                                   #
+# Validator output contract                                                   #
 # --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
 class ValidatorFinding:
-    """A single validator finding (``ValidatorFinding``, types.ts:17-26).
+    """A single validator finding (``ValidatorFinding``).
 
     ``severity`` distinguishes a soft ``finding`` (points lost, advisory) from a
     hard ``denial`` (gate-blocking). ``points_lost`` / ``global_impact_on_fix``
     are advisory deltas surfaced in guidance prose. Required fields are listed
     first (``category`` / ``message`` / ``severity``); the optional locators
-    default to ``None`` (Python dataclass ordering — the TS field *names* are
-    preserved, only the declaration order is adapted).
+    default to ``None`` (Python dataclass ordering).
     """
 
     category: FindingCategory | str
@@ -122,7 +120,7 @@ class ValidatorFinding:
 
 @dataclass(frozen=True)
 class ValidatorOutput:
-    """The validator output the lifecycle consumes (``ValidatorOutput``, types.ts:8-15).
+    """The validator output the lifecycle consumes (``ValidatorOutput``).
 
     **This is the entire contract the crucible validator adapter must satisfy.**
 
@@ -146,13 +144,13 @@ class ValidatorOutput:
 
 
 # --------------------------------------------------------------------------- #
-# SpecFull read contract (ports.ts:31-71)                                     #
+# SpecFull read contract                                                      #
 # --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
 class SpecDependencyEdge:
-    """A ticket-level dependency edge (``SpecDependencyEdge``, ports.ts:31-34).
+    """A ticket-level dependency edge (``SpecDependencyEdge``).
 
     ``from_ticket_id`` depends on ``to_ticket_id``. The shape matches the planning
     batch-validation edge so the action verb can pass ``spec_full.dependencies``
@@ -166,10 +164,10 @@ class SpecDependencyEdge:
 
 @dataclass(frozen=True)
 class TicketRef:
-    """A flat ticket projection inside :class:`EpicFull` (``TicketRef``, ports.ts:57-63).
+    """A flat ticket projection inside :class:`EpicFull` (``TicketRef``).
 
-    ``extra`` captures any additional ticket columns (the TS ``[key]: unknown``
-    index signature) the pre-checks may read without widening the typed surface.
+    ``extra`` captures any additional ticket columns (an open index of extra
+    keys) the pre-checks may read without widening the typed surface.
     """
 
     id: str
@@ -182,10 +180,10 @@ class TicketRef:
 
 @dataclass(frozen=True)
 class EpicFull:
-    """A flat epic projection with its tickets (``EpicFull``, ports.ts:48-55).
+    """A flat epic projection with its tickets (``EpicFull``).
 
-    ``extra`` captures the TS ``[key]: unknown`` index-signature columns (e.g. the
-    epic JSON the cross-cut referrer scan stringifies).
+    ``extra`` captures open index-signature columns (e.g. the epic JSON the
+    cross-cut referrer scan stringifies).
     """
 
     id: str
@@ -198,9 +196,9 @@ class EpicFull:
 
 @dataclass(frozen=True)
 class BlueprintRef:
-    """A flat blueprint projection (``BlueprintRef``, ports.ts:65-71).
+    """A flat blueprint projection (``BlueprintRef``).
 
-    ``extra`` captures the TS ``[key]: unknown`` index-signature columns.
+    ``extra`` captures open index-signature columns.
     """
 
     id: str
@@ -212,7 +210,7 @@ class BlueprintRef:
 
 @dataclass(frozen=True)
 class SpecFull:
-    """Full spec with all related entities (``SpecFull``, ports.ts:38-46).
+    """Full spec with all related entities (``SpecFull``).
 
     ``spec`` is the nested crucible :class:`~crucible.models.Specification` — the
     single source of truth the validator/gate scores directly. ``epics`` /
@@ -228,7 +226,7 @@ class SpecFull:
 
 
 # --------------------------------------------------------------------------- #
-# ConfigStore list-entry value shapes (config-store-interface.ts:4,8)         #
+# ConfigStore list-entry value shapes                                         #
 # --------------------------------------------------------------------------- #
 
 
@@ -236,7 +234,7 @@ class SpecFull:
 class ProjectConfigEntry:
     """One row of :meth:`ConfigStore.list_project_configs`.
 
-    ``{domain, overrides, schemaVersion}`` (config-store-interface.ts:4).
+    ``{domain, overrides, schemaVersion}``.
     """
 
     domain: str
@@ -248,7 +246,7 @@ class ProjectConfigEntry:
 class SpecConfigEntry:
     """One row of :meth:`ConfigStore.list_spec_configs`.
 
-    ``{domain, snapshot, schemaVersion}`` (config-store-interface.ts:8).
+    ``{domain, snapshot, schemaVersion}``.
     """
 
     domain: str
@@ -263,12 +261,11 @@ class SpecConfigEntry:
 
 @runtime_checkable
 class PlanningSessionStore(Protocol):
-    """Read planning-session rows (``IPlanningSessionStore``, planning-session-store.ts).
+    """Read planning-session rows.
 
     The production impl is a SQLite ``planning_sessions`` table guarded by the
     ``UNIQUE(specification_id) WHERE status != 'closed'`` partial index (the
-    one-active-session lock). Pagination from the TS ``Paginated<T>`` collapses to
-    plain lists locally.
+    one-active-session lock). Pagination collapses to plain lists locally.
     """
 
     def get_planning_session(self, session_id: str) -> PlanningSessionRecord | None: ...
@@ -286,7 +283,7 @@ class PlanningSessionStore(Protocol):
 
 @runtime_checkable
 class SpecStore(Protocol):
-    """Read spec state (``ISpecStore``, ports.ts:81-84).
+    """Read spec state.
 
     ``get_spec`` returns the flat/nested crucible :class:`~crucible.models.Specification`;
     ``get_spec_full`` recomposes child tables into a :class:`SpecFull`. Both return
@@ -300,7 +297,7 @@ class SpecStore(Protocol):
 
 @runtime_checkable
 class ConfigStore(Protocol):
-    """Project overrides / spec snapshots (``IConfigStore``, config-store-interface.ts).
+    """Project overrides / spec snapshots.
 
     The effective ``ValidatorConfig`` is assembled by
     ``crucible.merge_config(crucible.load_defaults(), overrides)`` where the
@@ -329,7 +326,7 @@ class ConfigStore(Protocol):
 
 @runtime_checkable
 class Validator(Protocol):
-    """Score a :class:`SpecFull` for a phase (``IValidator``, ports.ts:74-76).
+    """Score a :class:`SpecFull` for a phase.
 
     The production impl wraps crucible's synchronous ``validate`` and maps its
     richer result down to :class:`ValidatorOutput`. ``config`` is the effective
@@ -343,7 +340,7 @@ class Validator(Protocol):
 
 @runtime_checkable
 class OperationsLayer(Protocol):
-    """In-memory logical mutation projector (``IOperationsLayer``, ports.ts:87-95).
+    """In-memory logical mutation projector.
 
     :meth:`apply_mutation` projects ``op``/``payload`` onto a :class:`SpecFull`
     snapshot and returns the projected state. It does **not** persist — the
@@ -356,7 +353,7 @@ class OperationsLayer(Protocol):
 
 
 # --------------------------------------------------------------------------- #
-# The port bundle (LifecyclePorts, ports.ts:105-123)                          #
+# The port bundle (LifecyclePorts)                                            #
 # --------------------------------------------------------------------------- #
 
 
@@ -365,12 +362,10 @@ class LifecyclePorts:
     """The injected seam bundle ``create_lifecycle(ports)`` takes (``LifecyclePorts``).
 
     The five stores/adapters are required; ``persist_write_plan`` / ``clock`` /
-    ``id_generator`` are optional (mirroring the TS ``?`` fields). ``config_store``
-    replaces the TS pair of async config resolvers (``planningConfig`` /
-    ``planningLifecycleConfig``) — SpecSmither assembles the effective config from
-    the store directly (the async ``PlanningConfigResolver`` is skipped). When
-    ``persist_write_plan`` is omitted the engine builds the plan but does not
-    commit; production MUST wire it.
+    ``id_generator`` are optional. ``config_store`` assembles the effective config
+    from the store directly — a single config-store seam rather than a pair of
+    async config resolvers. When ``persist_write_plan`` is omitted the engine
+    builds the plan but does not commit; production MUST wire it.
     """
 
     planning_session_store: PlanningSessionStore

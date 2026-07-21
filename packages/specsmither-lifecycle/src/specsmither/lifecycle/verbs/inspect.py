@@ -1,5 +1,4 @@
-"""``inspect_planning_session`` — ported from
-``planning/verbs/inspect-planning-session.ts`` (A1 §1.5).
+"""``inspect_planning_session``.
 
 Pure and **read-only**: ``(payload, ports) -> VerbResult`` with ``write_plan = None``.
 Inspect composes a status report from the session, its (optional) ``spec_full``, and

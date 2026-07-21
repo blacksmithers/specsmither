@@ -1,13 +1,12 @@
 """``*StoreSqlite`` repositories implementing the store interfaces (the L5 layer).
 
-The third store implementation set (after the TS ``appsync-impl`` / ``json-impl``),
-drop-in via the same DI bag (:class:`AllStores` / :func:`make_stores`). Tickets
-decompose-on-write / recompose-on-read (explicit replace-all). Planning session /
-action / transition stores are read-only (writes flow through the WritePlan
-executor); the datapoint + aggregate stores carry the idempotent in-txn upsert the
-rollup uses. Every store is session-bound and never owns the transaction; count
-columns are written ONLY by the recompute worklist (#14) — the ``updateX*Count``
-delta-mutators are dropped (no-ops).
+The SQLite store implementation set, drop-in via the same DI bag
+(:class:`AllStores` / :func:`make_stores`). Tickets decompose-on-write /
+recompose-on-read (explicit replace-all). Planning session / action / transition
+stores are read-only (writes flow through the WritePlan executor); the datapoint +
+aggregate stores carry the idempotent in-txn upsert the rollup uses. Every store is
+session-bound and never owns the transaction; count columns are written ONLY by the
+recompute worklist — the ``updateX*Count`` delta-mutators are dropped (no-ops).
 
 This package's public surface re-exports the shared base, every concrete store
 class, the :class:`ProjectRecord` DTO defined alongside the core stores, and the

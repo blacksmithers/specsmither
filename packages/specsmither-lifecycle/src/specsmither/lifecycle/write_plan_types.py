@@ -14,7 +14,7 @@ Shape:
 
 * A :class:`WritePlan` is an ordered ``list[WritePlanItem]`` + a ``description``.
 * :data:`WritePlanItem` is a tagged union — one frozen dataclass per kind,
-  discriminated by a ``kind`` literal — over the 13 kinds in ``write-plan.ts``.
+  discriminated by a ``kind`` literal — one per write-plan kind.
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ class RecordTransition:
 class EntityScoreUpdate:
     """Set a per-entity score. No-op in SpecSmither's schema (entities carry no
     score column — the per-entity score lives on the datapoint/aggregate); kept
-    for wire parity and forward compatibility (writes ``{type}_score`` if present)."""
+    for wire-shape and forward compatibility (writes ``{type}_score`` if present)."""
 
     entity_type: ScoreEntityType
     entity_id: str
@@ -195,7 +195,7 @@ class PlanningDatapointPut:
     kind: Literal["planningDatapointPut"] = "planningDatapointPut"
 
 
-#: The discriminated union the executor dispatches over (the 13 ``write-plan.ts`` kinds).
+#: The discriminated union the executor dispatches over (one entry per write-plan kind).
 WritePlanItem = (
     SpecMutation
     | EntityDelete
@@ -217,8 +217,8 @@ WritePlanItem = (
 class WritePlan:
     """An ordered list of :data:`WritePlanItem` + a human ``description``.
 
-    (The TS ``transactions[][]`` chunker and the ``changes[]`` AppSync list are
-    deliberately dropped — SQLite has one atomic transaction and no subscribers.)
+    (There is no transaction chunker and no change-subscription list — SQLite has
+    one atomic transaction and no subscribers.)
     """
 
     items: list[WritePlanItem]

@@ -1,32 +1,30 @@
-"""Dependency-tree builder + structural-change gate (pure) — port of the TS tree.
+"""Dependency-tree builder + structural-change gate (pure).
 
-Ports ``packages/operations/src/aggregators/tree/{build-dependency-tree,
-compute-tree-update}.ts`` (recon A5 §1). The DP/SCC/blocker-depth heart lives in
-:mod:`specsmither.dag.critical_path`; this module is the *wiring*: it derives the
-deduped/sorted adjacency, the per-ticket ``unsatisfiedDeps``/``blockerCount``/
-``isReady`` fields, the rollup ``summary``, and the ``computeTreeUpdate`` gate
-that lets the recompute worklist skip a write (and a version bump) when nothing
-structural changed.
+The DP/SCC/blocker-depth heart lives in :mod:`specsmither.dag.critical_path`; this
+module is the *wiring*: it derives the deduped/sorted adjacency, the per-ticket
+``unsatisfied_deps``/``blocker_count``/``is_ready`` fields, the rollup
+``summary``, and the :func:`compute_tree_update` gate that lets the recompute
+worklist skip a write (and a version bump) when nothing structural changed.
 
-Outputs are byte-compared against the TS via golden fixtures, so every ordering
-and default is replicated exactly:
+Outputs are pinned by golden fixtures, so every ordering and default is
+deterministic:
 
 * **Sorted everything** (rule 4): tickets/epics iterated in sorted id order;
   ``dependencies``/``blocks`` deduped + sorted; ``edges`` sorted by ``(from, to)``;
-  ``ticketIds``/``readyTickets``/``blockedTickets`` sorted by ``(ticketNumber, id)``.
+  ``ticket_ids``/``ready_tickets``/``blocked_tickets`` sorted by
+  ``(ticket_number, id)``.
 * **Critical-path defaults** (rule 2): selection weighs a missing/0 estimate as
-  ``1`` but the rendered :class:`CriticalPathNode` and ``estimatedMinutesTotal``
+  ``1`` but the rendered :class:`CriticalPathNode` and ``estimated_minutes_total``
   default a *missing* estimate to ``60`` (a literal ``0`` stays ``0``). Both are
-  inherited verbatim from :func:`compute_critical_path`.
-* **Half-up minutes** (rule 1): ``criticalPathMinutes`` is the ``Math.round`` /
-  ``floor(x+0.5)`` of the summed DP weights (also inherited).
+  inherited from :func:`compute_critical_path`.
+* **Half-up minutes** (rule 1): ``critical_path_minutes`` is the ``floor(x+0.5)``
+  of the summed DP weights (also inherited).
 * **Exclusions**: the critical path drops ``done`` + cycle nodes; blocker depth
-  drops cycle nodes; ``hasCircularDeps = len(cycles) > 0``.
-* **Bug-11 guards**: a missing ``ticket_number``/``epic_number`` renders ``0`` and
-  a missing/empty ``title`` renders :data:`UNNUMBERED_PLACEHOLDER`.
+  drops cycle nodes; ``has_circular_deps = len(cycles) > 0``.
+* **Number/title guards**: a missing ``ticket_number``/``epic_number`` renders
+  ``0`` and a missing/empty ``title`` renders :data:`UNNUMBERED_PLACEHOLDER`.
 
-Field naming (TS camelCase -> snake_case): ``ticketNumber`` -> ``ticket_number``
-etc. The reverse-edge ``TreeEdge.from`` is a Python keyword, so it is spelled
+The reverse-edge ``TreeEdge.from`` is a Python keyword, so it is spelled
 :attr:`TreeEdge.from_` (``to`` is unchanged); a JSON serializer for the golden
 harness maps ``from_`` -> ``from``.
 
@@ -35,8 +33,8 @@ volatile ``generated_at`` and ``version`` and compares only ``edges``, ``cycles`
 each ticket's ``{status, is_ready, blocker_count, dependencies, blocks}`` and the
 summary's ``{total_tickets, has_circular_deps, critical_path_length,
 ready_tickets, blocked_tickets}``. When unchanged it returns the PREVIOUS tree
-(``hasChanged == False``) so the caller does NOT bump the version — preserving the
-cost-saver gate.
+(``has_changed == False``) so the caller does NOT bump the version — preserving
+the cost-saver gate.
 """
 
 from __future__ import annotations
@@ -75,7 +73,7 @@ _READY_BUCKET = ("pending", "ready")
 
 @dataclass(frozen=True, slots=True)
 class TreeEdge:
-    """A directed dependency edge (TS ``TreeEdge`` ``{from, to}``).
+    """A directed dependency edge (``{from, to}``).
 
     ``from`` is a Python keyword, so the dependent end is :attr:`from_`; the
     blocker end is :attr:`to`. ``from_`` serializes back to ``from`` for the
@@ -88,14 +86,14 @@ class TreeEdge:
 
 @dataclass(frozen=True, slots=True)
 class TreeCycle:
-    """One detected cycle (TS ``TreeCycle`` ``{cycle: string[]}``), ids sorted."""
+    """One detected cycle (``{cycle: [...]}``), ids sorted."""
 
     cycle: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class TreeEpic:
-    """An epic node in the tree (TS ``TreeEpic`` minus the input-only ``status``).
+    """An epic node in the tree (minus the input-only ``status``).
 
     The shared :class:`~specsmither.dag.types.EpicNode` carries no status (epic
     status is a counts/rollup concern derived in L4, not a pure-DAG output), so it
@@ -111,13 +109,13 @@ class TreeEpic:
 
 @dataclass(frozen=True, slots=True)
 class TreeTicket:
-    """A ticket node in the tree (TS ``TreeTicket``).
+    """A ticket node in the tree.
 
-    Derived fields (build-dependency-tree.ts:165-173): :attr:`unsatisfied_deps`
-    are the dependencies whose status is not ``done``; :attr:`blocker_count` is
-    their count; :attr:`is_ready` is ``blocker_count == 0 and status != 'done'``.
-    :attr:`estimated_minutes` is the raw input estimate (may be ``None``/``0``);
-    the ``?? 60`` display default only applies to the critical path / total.
+    Derived fields: :attr:`unsatisfied_deps` are the dependencies whose status is
+    not ``done``; :attr:`blocker_count` is their count; :attr:`is_ready` is
+    ``blocker_count == 0 and status != 'done'``. :attr:`estimated_minutes` is the
+    raw input estimate (may be ``None``/``0``); the ``60`` display default only
+    applies to the critical path / total.
     """
 
     id: str
@@ -146,7 +144,7 @@ class TicketsByStatus:
 
 @dataclass(frozen=True, slots=True)
 class TreeSummary:
-    """Rollup summary (TS ``TreeSummary``).
+    """Rollup summary.
 
     :attr:`critical_path_length` and :attr:`max_blocker_depth` are the scalars
     ``applyTree`` materializes onto the spec row (L4 reads them without parsing
@@ -166,9 +164,11 @@ class TreeSummary:
 
 @dataclass(frozen=True, slots=True)
 class ExtendedTreeSummary(TreeSummary):
-    """:class:`TreeSummary` + the critical-path nodes and estimate total (TS
-    ``ExtendedTreeSummary``). :attr:`estimated_minutes_total` sums each ticket's
-    estimate with the ``?? 60`` display default for missing estimates."""
+    """:class:`TreeSummary` + the critical-path nodes and estimate total.
+
+    :attr:`estimated_minutes_total` sums each ticket's estimate with the ``60``
+    display default for missing estimates.
+    """
 
     critical_path: tuple[CriticalPathNode, ...]
     estimated_minutes_total: int
@@ -176,7 +176,7 @@ class ExtendedTreeSummary(TreeSummary):
 
 @dataclass(frozen=True, slots=True)
 class DependencyTree:
-    """The full pre-computed dependency tree (TS ``DependencyTreeJSON``).
+    """The full pre-computed dependency tree.
 
     :attr:`generated_at` and :attr:`version` are volatile and ignored by
     :func:`compute_tree_update`'s structural equality. The
@@ -216,7 +216,7 @@ def build_dependency_tree(
 ) -> DependencyTree:
     """Build a full dependency tree from raw entity snapshots (pure).
 
-    Ports ``buildDependencyTree``. ``generated_at`` is volatile: it defaults to
+    ``generated_at`` is volatile: it defaults to
     :func:`specsmither.db.base.now_iso` but tests pin it. ``version`` auto-
     increments to ``(previous_version ?? 0) + 1`` on every build — the
     :func:`compute_tree_update` gate decides whether that bump is kept.
@@ -254,7 +254,7 @@ def build_dependency_tree(
     epic_number_by_id: dict[str | None, int | None] = {e.id: e.epic_number for e in epics_sorted}
     status_by_id = {t.id: t.status for t in tickets_sorted}
 
-    # Ticket nodes (insertion order = sorted id order, mirroring JS Object.values).
+    # Ticket nodes (insertion order = sorted id order).
     tree_tickets: dict[str, TreeTicket] = {}
     for t in tickets_sorted:
         deps = tuple(depends_on[t.id])
@@ -359,7 +359,7 @@ def compute_tree_update(
     previous: DependencyTree | None,
     current: DependencyTree,
 ) -> tuple[bool, DependencyTree]:
-    """The cost-saver gate (TS ``computeTreeUpdate``): has the tree changed?
+    """The cost-saver gate: has the tree changed?
 
     Returns ``(has_changed, tree)``. With no ``previous`` tree the build is
     always a change ``(True, current)``. Otherwise structural equality is checked
@@ -377,7 +377,7 @@ def compute_tree_update(
 
 
 def _tree_structurally_equal(a: DependencyTree, b: DependencyTree) -> bool:
-    """Port of ``treeStructurallyEqual`` (ignores ``generatedAt`` + ``version``)."""
+    """Structural equality (ignores ``generated_at`` + ``version``)."""
 
     if a.specification_id != b.specification_id:
         return False

@@ -5,13 +5,14 @@ vocabulary (TicketType, Complexity, EpicCategory, TestType, …) is the single
 source of truth in ``crucible.models.enums`` and is reused from there — it is
 deliberately NOT redefined in this module.
 
-Ground truth (ported verbatim so values round-trip with the TS/JSON wire):
-- ``session-types/src/runtime/enums.ts`` (lifecycle / planning / cross-val vocab)
-- ``api-types/src/runtime/status.ts`` (the 4-value ticket status surface)
-- ``api-types/src/runtime/ticket-record.ts`` (ticket file-change ``kind``)
+These are the canonical wire vocabularies (values round-trip as their plain JSON
+string):
+- the lifecycle / planning / cross-validation vocabulary
+- the 4-value ticket status surface
+- the ticket file-change ``kind``
 
 All members are :class:`enum.StrEnum`, so a member compares equal to and is
-usable anywhere its verbatim string value is expected.
+usable anywhere its string value is expected.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ __all__ = [
 
 
 class TicketStatus(StrEnum):
-    """Canonical 4-value ticket status (api-types ``TICKET_STATUSES``).
+    """Canonical 4-value ticket status (``TICKET_STATUSES``).
 
     "Blocked" is not a status — it is signalled via ``block_reason`` on a
     ``pending`` ticket.
@@ -55,7 +56,7 @@ class TicketStatus(StrEnum):
 
 
 class SpecStatus(StrEnum):
-    """Spec lifecycle (session-types ``SPEC_STATUSES``) — all 8 values verbatim.
+    """Spec lifecycle (``SPEC_STATUSES``) — all 8 canonical values.
 
     SpecSmither has NO review lifecycle, so ``ready_for_review`` / ``in_review``
     / ``reviewed`` are UNREACHABLE here. They are kept because the M0 CRUD freeze
@@ -76,7 +77,7 @@ class SpecStatus(StrEnum):
 
 
 class PlanningSessionStatus(StrEnum):
-    """Planning-session status (session-types ``PLANNING_SESSION_STATUSES``)."""
+    """Planning-session status (``PLANNING_SESSION_STATUSES``)."""
 
     ACTIVE = "active"
     AWAITING_HUMAN_REVIEW = "awaiting_human_review"
@@ -84,7 +85,7 @@ class PlanningSessionStatus(StrEnum):
 
 
 class WorkSessionStatus(StrEnum):
-    """Work-session status (session-types ``WORK_SESSION_STATUSES``)."""
+    """Work-session status (``WORK_SESSION_STATUSES``)."""
 
     ACTIVE = "active"
     COMPLETED = "completed"
@@ -92,7 +93,7 @@ class WorkSessionStatus(StrEnum):
 
 
 class PlanningPhase(StrEnum):
-    """Planning phase machine (session-types ``PLANNING_PHASES``)."""
+    """Planning phase machine (``PLANNING_PHASES``)."""
 
     PLANNING_SPEC = "planning_spec"
     EPIC_DECOMPOSITION = "epic_decomposition"
@@ -104,7 +105,7 @@ class PlanningPhase(StrEnum):
 
 
 class TransitionTrigger(StrEnum):
-    """Phase-transition trigger (session-types ``TRANSITION_TRIGGERS``)."""
+    """Phase-transition trigger (``TRANSITION_TRIGGERS``)."""
 
     AUTO_INITIAL = "auto_initial"
     AI_AGENT = "ai_agent"
@@ -115,14 +116,14 @@ class TransitionTrigger(StrEnum):
 
 
 class Outcome(StrEnum):
-    """Audited action outcome (session-types ``OUTCOMES``)."""
+    """Audited action outcome (``OUTCOMES``)."""
 
     SUCCESS = "success"
     DENIED = "denied"
 
 
 class DatapointTrigger(StrEnum):
-    """Score-datapoint trigger (session-types ``DATAPOINT_TRIGGERS``)."""
+    """Score-datapoint trigger (``DATAPOINT_TRIGGERS``)."""
 
     CREATED = "created"
     METADATA_UPDATED = "metadata_updated"
@@ -137,10 +138,9 @@ class DatapointTrigger(StrEnum):
 
 
 class GuidanceVariant(StrEnum):
-    """Guidance-message variant (session-types ``GUIDANCE_VARIANTS``).
+    """Guidance-message variant (``GUIDANCE_VARIANTS``).
 
-    Includes the six M6.6 additions consumed exclusively by
-    ``get_planning_status``.
+    Includes the six additions consumed exclusively by ``get_planning_status``.
     """
 
     DENIED = "denied"
@@ -151,7 +151,7 @@ class GuidanceVariant(StrEnum):
     PHASE_ADVANCE = "phase_advance"
     PHASE_ROLLBACK = "phase_rollback"
     PHASE_COMPLETE = "phase_complete"
-    # M6.6 additions.
+    # Status-poll additions.
     PHASE_STATUS_REPORT = "phase_status_report"
     AWAITING_HUMAN_REVIEW_HANDOVER = "awaiting_human_review_handover"
     HUMAN_FEEDBACK_RECEIVED = "human_feedback_received"
@@ -161,7 +161,7 @@ class GuidanceVariant(StrEnum):
 
 
 class FindingCategory(StrEnum):
-    """Cross-validation finding category (session-types ``FINDING_CATEGORIES``)."""
+    """Cross-validation finding category (``FINDING_CATEGORIES``)."""
 
     RUBRIC = "rubric"
     COUNT = "count"
@@ -172,14 +172,14 @@ class FindingCategory(StrEnum):
 
 
 class GateResult(StrEnum):
-    """Gate result (session-types ``GATE_RESULTS``)."""
+    """Gate result (``GATE_RESULTS``)."""
 
     PASS = "pass"
     FAIL = "fail"
 
 
 class FieldState(StrEnum):
-    """Field-presence state (session-types ``FIELD_STATES``)."""
+    """Field-presence state (``FIELD_STATES``)."""
 
     EMPTY = "empty"
     PARTIAL = "partial"
@@ -188,7 +188,7 @@ class FieldState(StrEnum):
 
 
 class ExpectedAction(StrEnum):
-    """Planned file action (session-types ``EXPECTED_ACTIONS``)."""
+    """Planned file action (``EXPECTED_ACTIONS``)."""
 
     CREATE = "create"
     MODIFY = "modify"
@@ -197,7 +197,7 @@ class ExpectedAction(StrEnum):
 
 
 class ActualAction(StrEnum):
-    """Observed file action (session-types ``ACTUAL_ACTIONS``)."""
+    """Observed file action (``ACTUAL_ACTIONS``)."""
 
     CREATED = "created"
     MODIFIED = "modified"
@@ -207,7 +207,7 @@ class ActualAction(StrEnum):
 
 
 class FileChangeStatus(StrEnum):
-    """Expected-vs-actual reconciliation (session-types ``FILE_CHANGE_STATUSES``)."""
+    """Expected-vs-actual reconciliation (``FILE_CHANGE_STATUSES``)."""
 
     MATCHED = "matched"
     MISSING = "missing"
@@ -216,7 +216,7 @@ class FileChangeStatus(StrEnum):
 
 
 class JustificationApproved(StrEnum):
-    """Justification approval state (session-types ``JUSTIFICATION_APPROVED_VALUES``)."""
+    """Justification approval state (``JUSTIFICATION_APPROVED_VALUES``)."""
 
     PENDING = "pending"
     APPROVED = "approved"
@@ -224,11 +224,11 @@ class JustificationApproved(StrEnum):
 
 
 class FileChangeKind(StrEnum):
-    """Ticket PLAN-side file-change kind (api-types ``TicketFileChangeKind``).
+    """Ticket PLAN-side file-change kind (``TicketFileChangeKind``).
 
     Drives ``ticket_file_changes.kind`` (schema §3). Distinct from the work-side
     :class:`ExpectedAction` / :class:`ActualAction` vocabulary — these are the
-    ``toBeX`` camelCase literals from ``api-types/runtime/ticket-record.ts``.
+    ``toBeX`` camelCase literals.
     """
 
     TO_BE_CREATED = "toBeCreated"
@@ -240,12 +240,10 @@ class FileChangeKind(StrEnum):
 class EpicStatus(StrEnum):
     """Epic lifecycle status.
 
-    A DISTINCT enum exists in the TS (``types/src/schema/epic.ts`` →
-    ``'todo' | 'in_progress' | 'completed'``), and the planning verbs that
-    SpecSmither ports create epics with ``status: 'todo'`` and explicitly comment
-    that this is "a constrained EpicStatus enum (todo|in_progress|completed)"
-    (``lifecycle/.../action-planning-session.ts``). So epics do NOT share the
-    ticket vocabulary — these three values are ported verbatim.
+    Epics use a DISTINCT, constrained vocabulary
+    (``'todo' | 'in_progress' | 'completed'``): the planning verbs create epics with
+    ``status: 'todo'``. So epics do NOT share the ticket vocabulary — these are the
+    three canonical values.
     """
 
     TODO = "todo"
@@ -256,10 +254,10 @@ class EpicStatus(StrEnum):
 class ActorType(StrEnum):
     """Audit actor identity (§6 actor model).
 
-    Confirmed against the TS: ``actor: 'agent' | 'human'`` throughout the
-    planning verbs / ``action-builder.ts``. There is no named ``ACTOR_TYPES``
-    array — the union is inlined — so the two members are defined here. MCP tool
-    calls resolve to ``agent``; explicit CLI handover/approve commands to ``human``.
+    The actor is ``'agent' | 'human'`` throughout the planning verbs and the audit
+    row builders. There is no named ``ACTOR_TYPES`` vocabulary — the union is
+    inlined — so the two members are defined here. MCP tool calls resolve to
+    ``agent``; explicit CLI handover/approve commands to ``human``.
     """
 
     AGENT = "agent"

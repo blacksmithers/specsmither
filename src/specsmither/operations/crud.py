@@ -1,9 +1,8 @@
-"""M0 CRUD mutation primitives — work item #18.
+"""M0 CRUD mutation primitives.
 
-A clean Python rewrite of the SpecForge operations CRUD surface
-(``packages/operations/src/operations/{create,update,delete,bulk,dependencies,
-blueprints}.ts`` + the inline freeze guards from ``guards/``), rebound onto the
-SQLite ``*StoreSqlite`` repositories.
+The operations CRUD surface (create / update / delete / bulk / dependencies /
+blueprints, plus the inline freeze guards) over the SQLite ``*StoreSqlite``
+repositories.
 
 Every function here is a **mutation primitive**: it owns ITS OWN transaction and
 runs the in-transaction recompute worklist before commit (architecture invariant
@@ -16,20 +15,19 @@ runs the in-transaction recompute worklist before commit (architecture invariant
         ... read the affected record(s) back via the stores ...
     # the begin() context commits on exit; rolls back on any exception
 
-The TS handlers/stores NEVER recomputed (DynamoDB streams did) — so the
-:func:`~specsmither.rollups.recompute.recompute` call is ADDED here; without it
-the denormalized counts / progress / dependency tree silently stop updating.
+The :func:`~specsmither.rollups.recompute.recompute` call runs in the same
+transaction as the mutation; without it the denormalized counts / progress /
+dependency tree would silently stop updating.
 
-What is dropped versus the TS originals (single-user, NO-LLM, no cloud):
+What SpecSmither omits (single-user, NO-LLM, no cloud):
 
-* auth / ``requireProjectAccess`` (single local user) — only the entity-existence
+* auth / project-access checks (single local user) — only the entity-existence
   check survives (missing parent → :class:`NotFoundError`);
-* the injected ``scoreX`` / ``applyGatedPhaseTransition`` / ``normalizeImplementation``
-  / ``freezeSpecSnapshots`` callbacks (scoring / lifecycle / checklist / config);
-* ``delete.ts``'s ``appSyncClient.mutate(deleteXAtomic)`` cascade — replaced by a
-  single ORM delete that leans on ``FOREIGN KEY ... ON DELETE CASCADE``.
+* the injected scoring / lifecycle / checklist / config callbacks;
+* an atomic cloud-mutation cascade on delete — replaced by a single ORM delete
+  that leans on ``FOREIGN KEY ... ON DELETE CASCADE``.
 
-The freeze guard is the one PURE domain rule kept verbatim: a spec in ``done`` /
+The freeze guard is the one PURE domain rule enforced here: a spec in ``done`` /
 ``reviewed`` is read-only (blocks update), and ``done`` / ``reviewed`` /
 ``in_review`` block creating child entities under it.
 """
@@ -179,7 +177,7 @@ def _apply_changes(record: _R, changes: Mapping[str, Any]) -> _R:
     Dumps the record to a plain dict, overlays ``changes``, and re-validates so a
     string value (e.g. ``status="done"``) is coerced back to its typed enum /
     sub-model. A rejected value (e.g. a planning-phase string passed as
-    ``Spec.status``, the M4.13 rule) surfaces as :class:`ValidationFailedError`.
+    ``Spec.status``) surfaces as :class:`ValidationFailedError`.
     """
     data = record.model_dump(by_alias=False)
     data.update(changes)
@@ -329,7 +327,7 @@ def create_ticket(
 ) -> TicketRecord:
     """Create a ticket under ``epic_id`` (freeze-guarded) and recompute the spec.
 
-    Seeded ``ready`` (the TS create default); the recompute cascade then re-derives
+    Seeded ``ready`` (the create default); the recompute cascade then re-derives
     its status from any dependencies. Child arrays (acceptance criteria,
     implementation steps, the four ``files_to_be_*`` lists, ``test_types``) ride in
     via ``fields`` and are decomposed into the owned child tables by the store.
@@ -392,8 +390,8 @@ def update_specification(
     """Update a spec's fields (freeze-guarded read-only check on its own status).
 
     ``changes`` is a snake_case map of :class:`SpecificationRecord` fields. A
-    ``status`` value that is not a valid :class:`SpecStatus` (e.g. a planning phase,
-    the M4.13 rule) is rejected with :class:`ValidationFailedError`.
+    ``status`` value that is not a valid :class:`SpecStatus` (e.g. a planning phase)
+    is rejected with :class:`ValidationFailedError`.
     """
     with session_factory.begin() as session:
         stores = make_stores(session)
@@ -588,8 +586,8 @@ def would_create_cycle(
 ) -> bool:
     """Would adding ``ticket_id → depends_on_id`` introduce a cycle?
 
-    Verbatim port of the TS ``wouldCreateCycle`` BFS: follow the existing edge set
-    forward from ``depends_on_id`` (each ``ticket → depends_on`` step); if it can
+    A BFS over the dependency graph: follow the existing edge set forward from
+    ``depends_on_id`` (each ``ticket → depends_on`` step); if it can
     already reach ``ticket_id`` then closing the new edge forms a cycle. A
     self-edge is trivially a cycle.
     """
@@ -725,8 +723,8 @@ def bulk_add_dependencies(
     """Add up to 100 dependency edges with PER-ITEM partial success; recompute once.
 
     The batch is capped at :data:`MAX_BULK_DEPENDENCIES` (a batch over the cap is
-    REJECTED outright, never silently truncated). There is NO cycle pre-check
-    (faithful to the operations bulk path — run a cycle report afterward if needed);
+    REJECTED outright, never silently truncated). There is NO cycle pre-check on the
+    bulk path — run a cycle report afterward if needed;
     a self-edge, a duplicate ``(ticket, depends_on)`` and a bad FK each fail only
     THEIR item (isolated by a SAVEPOINT) and are collected in ``failed``. The
     recompute worklist runs once at the end over every touched spec.

@@ -1,8 +1,7 @@
 """The single English guidance composer — :func:`compose_response` + get_planning_status.
 
-A **minimal** port of the TS composer family (``planning/lifecycle-planning-guidance/
-compose.ts`` + ``planning/process-guidance/compose-*.ts``). Rather than reproduce the
-~40 template-interpolated TS files (and their generated catalog), 0.1.0 ships one terse,
+A **minimal** guidance composer. Rather than a large family of
+template-interpolated files (and a generated catalog), 0.1.0 ships one terse,
 correct, English composer keyed off :class:`~specsmither.domain.enums.GuidanceVariant`.
 The structured side-blocks (next-entities, recommended-moves, findings) are derived from
 the same inputs the verbs already hold (the gate result + the validator output), so the
@@ -65,14 +64,14 @@ __all__ = [
 #: ``PLANNING_LIFECYCLE_DEFAULTS['guidance']['maxNextEntitiesToShow']``).
 _DEFAULT_MAX_NEXT_ENTITIES = 3
 
-#: Hard cap on finding-derived recommended moves (TS ``RECOMMENDED_MOVES_CAP``).
+#: Hard cap on finding-derived recommended moves (``RECOMMENDED_MOVES_CAP``).
 _RECOMMENDED_MOVES_CAP = 3
 
-#: Hard cap on the summarized findings list (TS ``MAX_FINDINGS_PER_CATEGORY``, flattened).
+#: Hard cap on the summarized findings list (``MAX_FINDINGS_PER_CATEGORY``, flattened).
 _MAX_FINDINGS = 20
 
-#: Human-readable phase names + 1-based indices (the generated TS ``PHASES`` catalog,
-#: trimmed to the two fields the prose reads). ``planned`` is the sentinel (index 0).
+#: Human-readable phase names + 1-based indices (the ``PHASES`` catalog, trimmed to
+#: the two fields the prose reads). ``planned`` is the sentinel (index 0).
 _PHASE_META: dict[PlanningPhase, tuple[str, int]] = {
     PlanningPhase.PLANNING_SPEC: ("Spec Definition", 1),
     PlanningPhase.EPIC_DECOMPOSITION: ("Epic Decomposition", 2),
@@ -85,7 +84,7 @@ _PHASE_META: dict[PlanningPhase, tuple[str, int]] = {
 
 
 # --------------------------------------------------------------------------- #
-# Small display helpers (the TS resume-helpers.ts surface, trimmed)           #
+# Small display helpers (the resume-helpers surface, trimmed)                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -177,9 +176,9 @@ def _fmt_threshold(threshold: float | None) -> str:
 def _summarize_findings(findings: list[ValidatorFinding]) -> tuple[list[FindingSummary], str | None]:
     """Flatten validator findings into capped :class:`FindingSummary` rows + a summary.
 
-    Mirrors ``composeFindingsBlock``: the summary line counts findings across distinct
-    categories; the list is capped at :data:`_MAX_FINDINGS` (deferring the rich
-    per-category grouping of the TS composer to a later milestone).
+    The summary line counts findings across distinct categories; the list is capped at
+    :data:`_MAX_FINDINGS` (the rich per-category grouping is deferred to a later
+    milestone).
     """
 
     if not findings:
@@ -270,7 +269,7 @@ def _next_entities(
 def _append_field_instructions(body: str, phase: PlanningPhase) -> str:
     """Append the rich per-field guidance block for ``phase`` to a terse variant body.
 
-    Ports SpecForge's M8.6.1 behaviour — the phase's field catalog (shape, required/optional,
+    The phase's field catalog (shape, required/optional,
     minimum count, N/A mechanism, tier, examples) is delivered *through the prose* so the
     actor fills without guessing. 0.1.x renders the full phase catalog (no spec snapshot →
     no state detection); :func:`compose_field_instructions` supports snapshot-filtered

@@ -1,4 +1,4 @@
-"""Ticket status machine — verbatim port of ``api-types/runtime/status.ts``.
+"""Ticket status machine.
 
 Canonical 4-value status surface matching the published JSON schema
 (https://schema.specforge.tech/schema/v1.0/specforge-schema.json). "Blocked" is
@@ -7,11 +7,11 @@ not a status — it is signalled via ``block_reason`` on a *pending* ticket.
 The spec status vocabulary (8 values) lives in
 :class:`specsmither.domain.enums.SpecStatus`; it belongs to the planning
 lifecycle, not this entity API surface. This module is deliberately separate
-from the status-*calculator* (work item #3, not the calculator).
+from the status-*calculator*.
 
 Predicates accept raw ``str`` and coerce unknown values to
-:attr:`TicketStatus.PENDING` (the TS ``asTicketStatus`` fallback), so the
-membership predicates always have a defined answer.
+:attr:`TicketStatus.PENDING`, so the membership predicates always have a defined
+answer.
 """
 
 from __future__ import annotations
@@ -66,8 +66,7 @@ def is_valid_status(status: str) -> bool:
 def _as_ticket_status(status: str) -> TicketStatus:
     """Coerce ``status`` to a :class:`TicketStatus`, falling back to ``PENDING``.
 
-    Verbatim port of the internal TS ``asTicketStatus`` helper. The predicates
-    below depend on this fallback for unknown input.
+    The predicates below depend on this fallback for unknown input.
     """
     return TicketStatus(status) if is_valid_status(status) else TicketStatus.PENDING
 

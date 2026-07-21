@@ -13,10 +13,9 @@ are plain string columns that match the plan's ids/paths — there is deliberate
 foreign key to the planned acceptance-criterion / implementation-step / file-change
 row (architecture §3, "link by value not FK").
 
-Column names follow the canonical ``session-types`` schema as corrected in
-architecture §13 (``checked``/``checked_at``, ``done``/``done_at``,
-``expected_path`` + ``expected_action``/``actual_action``, and the two separate
-test-justification arrays).
+Column names follow the schema in architecture §13 (``checked``/``checked_at``,
+``done``/``done_at``, ``expected_path`` + ``expected_action``/``actual_action``,
+and the two separate test-justification arrays).
 """
 
 from __future__ import annotations

@@ -1,8 +1,6 @@
-"""Pre-check: enum-poison write guard on the content arrays (ME.14.2).
+"""Pre-check: enum-poison write guard on the content arrays.
 
-A faithful port of the enum-poison guard added in ``209a81e5``. Pure.
-
-An agent may author a plausible-but-off-enum value inside a content array
+Pure. An agent may author a plausible-but-off-enum value inside a content array
 (``nonFunctionalRequirements[].category = 'portability'``, ``guardrails[].category =
 'architecture'``, ``techStack[].layer = 'language'``, ``goals[].type = 'foo'``, …). The
 write boundary constructs the typed record over the crucible sub-models, whose enums then

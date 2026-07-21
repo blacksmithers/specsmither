@@ -1,8 +1,6 @@
 """Pre-check: is ``op`` allowed in the session's current phase?
 
-Faithful port of ``planning/pre-checks/operation-allowed.ts`` (A1 §1.4). Pure.
-
-Delegates the phase decision to
+Pure. Delegates the phase decision to
 :func:`~specsmither.lifecycle.operations_registry.classify_operation_call`:
 
 * ``forbidden`` → :class:`Denied` (``current_phase_must_finish_first``).
@@ -12,8 +10,7 @@ Delegates the phase decision to
   a late ``update_*`` whose payload touches ONLY ``fieldDeclarations``: that is an
   N/A justification, not a structural body change, and is exempt from rollback
   (``rollback=False``). The exemption lets an agent declare e.g. ``dependencies``
-  N/A during ``cross_validation`` without being thrown back to ``ticket_expansion``
-  (M8.6.9).
+  N/A during ``cross_validation`` without being thrown back to ``ticket_expansion``.
 """
 
 from __future__ import annotations
@@ -95,8 +92,7 @@ def _is_field_declarations_only_update(
 ) -> bool:
     """``True`` iff ``op`` is an ``update_*`` whose ``fields`` are only ``fieldDeclarations``.
 
-    Mirrors ``isFieldDeclarationsOnlyUpdate`` (operation-allowed.ts:36-42): a
-    non-empty ``fields`` map whose every key is ``fieldDeclarations``.
+    A non-empty ``fields`` map whose every key is ``fieldDeclarations``.
     """
 
     if op not in _UPDATE_OPS:

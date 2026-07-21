@@ -1,12 +1,12 @@
-"""``TicketStoreSqlite`` — the ticket entity repository (work item #8).
+"""``TicketStoreSqlite`` — the ticket entity repository.
 
 The hardest store in M0: a ``Ticket`` is authored/read as one fully-hydrated
 :class:`~specsmither.domain.records.TicketRecord` (flat columns + child-backed
 arrays), but persisted **decomposed** across the parent ``tickets`` row plus four
 owned child tables. This store is the decompose-on-write / recompose-on-read seam.
 
-Owned child tables (REPLACE-ALL on every write — the SQLite analogue of the
-AppSync ``relatedReplace``):
+Owned child tables (REPLACE-ALL on every write — delete the ticket's existing rows
+and re-insert the new set):
 
 * ``acceptance_criteria`` — the BDD ``given`` / ``when`` / ``then`` triple, ordered.
 * ``implementation_steps`` — ordered ``text`` rows.
@@ -22,12 +22,12 @@ AppSync ``relatedReplace``):
 columns on the ticket row (crucible sub-models, dumped ``by_alias``), NOT child
 tables — they round-trip through the row, mirroring :mod:`specsmither.domain.records`.
 
-Faithful-port boundaries (the ``TicketRecord`` DTO is the contract, and it is
-deliberately scoped to *this* entity):
+Record boundaries (the ``TicketRecord`` DTO is the contract, and it is deliberately
+scoped to *this* entity):
 
 * **Counts are never written here.** ``incoming_dep_count`` / ``outgoing_dep_count``
   / ``blueprint_count`` are read back onto the record but only the recompute
-  worklist (#14) writes them; the ``update_ticket_*_count`` delta-mutators are
+  worklist writes them; the ``update_ticket_*_count`` delta-mutators are
   no-ops (architecture §4, invariant 4).
 * **Dependencies, blueprint refs and code/type *snippets* are sibling-owned.**
   ``TicketRecord`` carries no field for them (records.py maps ``code_references`` /
@@ -258,7 +258,7 @@ class TicketStoreSqlite(SessionStore):
     ) -> list[TicketRecord]:
         """List tickets (optionally filtered by epic / status), each fully hydrated.
 
-        Collapses the AppSync ``listTicketsFor{Dashboard,Readiness,GateCheck,...}``
+        Collapses the ``listTicketsFor{Dashboard,Readiness,GateCheck,...}``
         projection variants into one ordered SELECT (projection economy is moot in
         SQLite); children are batch-loaded once for the whole page.
         """
@@ -308,13 +308,13 @@ class TicketStoreSqlite(SessionStore):
     # --- count delta-mutators (no-ops) ---
 
     def update_ticket_incoming_dep_count(self, ticket_id: str, delta: int) -> None:
-        """No-op: counts written only by the recompute worklist (#14)."""
+        """No-op: counts written only by the recompute worklist."""
 
     def update_ticket_outgoing_dep_count(self, ticket_id: str, delta: int) -> None:
-        """No-op: counts written only by the recompute worklist (#14)."""
+        """No-op: counts written only by the recompute worklist."""
 
     def update_ticket_blueprint_count(self, ticket_id: str, delta: int) -> None:
-        """No-op: counts written only by the recompute worklist (#14)."""
+        """No-op: counts written only by the recompute worklist."""
 
     # --- internals ---
 

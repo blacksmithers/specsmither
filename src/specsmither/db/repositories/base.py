@@ -7,8 +7,8 @@ transaction boundary and runs the recompute worklist before commit.
 
 Two hard rules these stores obey (architecture §4, invariants 3+4):
 
-1. **Count columns are NEVER written here.** The TS store interfaces expose ~33
-   ``updateX*Count(delta)`` delta-mutators; SpecSmither drops them (no-ops). The
+1. **Count columns are NEVER written here.** SpecSmither exposes no
+   ``updateX*Count(delta)`` delta-mutators — they are no-ops. The
    denormalized counts + cached tree are written **only** by the recompute
    worklist (``rollups/recompute.py``), recomputed from the authoritative child
    rows — so there are no deltas to race.

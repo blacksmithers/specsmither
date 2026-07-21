@@ -1,23 +1,21 @@
 """Critical path / blocker depth / cycle detection — the determinism heart.
 
-Verbatim port of the SpecForge TS tree aggregators
-``aggregators/tree/{critical-path,blocker-depth,cycle-detection}.ts`` plus the
-``build-dependency-tree.ts`` wiring that turns the raw ``{path, minutes}`` DP
-result into ``CriticalPathNode``s. Outputs are byte-compared against the TS via
-golden fixtures, so the determinism traps are replicated exactly:
+Wires the tree aggregators (critical path, blocker depth, cycle detection) into
+the ``build-dependency-tree`` mapping that turns the raw ``{path, minutes}`` DP
+result into :class:`CriticalPathNode`s. Outputs are pinned by golden fixtures, so
+the determinism traps are enforced exactly:
 
-* **Half-up rounding** (rule 1): ``Math.round`` rounds half toward +inf;
+* **Half-up rounding** (rule 1): half rounds toward +inf;
   :func:`round_half_up` uses ``floor(x + 0.5)`` (NOT Python ``round``/banker's).
 * **0 -> 1 DP weight** (rule 2): a missing/zero estimate weighs **1** in path
-  *selection* (``estimatedMinutes > 0 ? estimatedMinutes : 1``) but the displayed
-  :attr:`CriticalPathNode.estimated_minutes` defaults a *missing* estimate to
-  **60** via the TS ``?? 60`` (a literal ``0`` renders as ``0``, not 60).
-* **lexLess tie-break** (rule 3): equal path-minutes -> the lexicographically
+  *selection* (``estimated_minutes > 0 ? estimated_minutes : 1``) but the
+  displayed :attr:`CriticalPathNode.estimated_minutes` defaults a *missing*
+  estimate to **60** (a literal ``0`` renders as ``0``, not 60).
+* **lex_less tie-break** (rule 3): equal path-minutes -> the lexicographically
   smaller id-list wins; :func:`lex_less` is an element-wise compare where a
   shorter list wins on a shared prefix.
 * **Sorted adjacency / roots** (rule 4): dependency lists are deduped+sorted and
-  nodes/roots are iterated in sorted id order. Python ``sorted()`` on ASCII ids
-  matches the TS JS order byte-for-byte.
+  nodes/roots are iterated in sorted id order, giving a stable ASCII ordering.
 * **Iterative Tarjan SCC** (rule 5): :func:`find_cycles` uses an explicit work
   stack (no recursion), emits SCCs of size >= 2 *plus* self-loops, sorts each
   cycle and the result by ``cycle[0]``.
@@ -46,8 +44,8 @@ __all__ = [
     "round_half_up",
 ]
 
-#: Placeholder for a missing ``ticket_number``/``title`` (build-dependency-tree.ts
-#: Bug 11 guards). A missing number renders as ``0``; a missing title as this.
+#: Placeholder for a missing ``ticket_number``/``title`` (build-tree guards).
+#: A missing number renders as ``0``; a missing title as this.
 UNNUMBERED_PLACEHOLDER = "<unnumbered>"
 
 #: Shared immutable default so ``frozenset()`` is never a function-call default.
@@ -56,12 +54,10 @@ _NO_EXCLUDE: frozenset[str] = frozenset()
 
 @dataclass(frozen=True, slots=True)
 class CriticalPathNode:
-    """A node on the critical path (TS ``CriticalPathNode``).
+    """A node on the critical path.
 
-    Field mapping (TS camelCase -> snake_case): ``ticketNumber`` ->
-    :attr:`ticket_number`, ``estimatedMinutes`` -> :attr:`estimated_minutes`.
-    :attr:`estimated_minutes` carries the **display** default (``?? 60``): a
-    *missing* estimate renders 60, a literal 0 renders 0.
+    :attr:`estimated_minutes` carries the **display** default: a *missing*
+    estimate renders 60, a literal 0 renders 0.
     """
 
     id: str
@@ -72,12 +68,11 @@ class CriticalPathNode:
 
 @dataclass(frozen=True, slots=True)
 class CriticalPathResult:
-    """Everything ``build-dependency-tree.ts`` consumes from the critical path.
+    """Everything the dependency-tree builder consumes from the critical path.
 
-    Field mapping for the tree/golden/L4 consumers: :attr:`path` ->
-    ``criticalPath`` (list of :class:`CriticalPathNode`), :attr:`length` ->
-    ``criticalPathLength`` (node count), :attr:`minutes` -> ``criticalPathMinutes``
-    (``Math.round`` of the summed DP weights, NOT the summed display values).
+    :attr:`path` is the list of :class:`CriticalPathNode`, :attr:`length` the node
+    count, and :attr:`minutes` the half-up round of the summed DP weights (NOT the
+    summed display values).
     """
 
     path: tuple[CriticalPathNode, ...]
@@ -87,25 +82,25 @@ class CriticalPathResult:
 
 @dataclass(frozen=True, slots=True)
 class _Candidate:
-    """Internal DP result mirroring the TS ``CriticalPathResult`` ``{path, minutes}``."""
+    """Internal DP result: ``{path, minutes}``."""
 
     path: tuple[str, ...]
     minutes: int
 
 
 def round_half_up(value: float) -> int:
-    """Replicate JS ``Math.round`` (half rounds toward +inf).
+    """Round half toward +inf.
 
     ``round_half_up(0.5) == 1`` and ``round_half_up(2.5) == 3`` where Python's
-    banker's ``round`` would yield ``0`` and ``2``. Use this for every value the
-    TS rounds (``criticalPathMinutes`` and, downstream, ``progress``).
+    banker's ``round`` would yield ``0`` and ``2``. Use this for every rounded
+    value (``critical_path_minutes`` and, downstream, ``progress``).
     """
 
     return math.floor(value + 0.5)
 
 
 def lex_less(a: Sequence[str], b: Sequence[str]) -> bool:
-    """Element-wise lexicographic ``a < b`` over id-lists (TS ``lexLess``).
+    """Element-wise lexicographic ``a < b`` over id-lists.
 
     Compares element by element; the first differing element decides. On a shared
     prefix the **shorter** list is "less".
@@ -128,8 +123,7 @@ def compute_critical_path(
 ) -> CriticalPathResult:
     """Longest (critical) path through the dependency DAG.
 
-    Verbatim port of ``computeCriticalPath`` folded with the
-    ``build-dependency-tree.ts`` mapping to :class:`CriticalPathNode`.
+    Folds the longest-path DP with the mapping to :class:`CriticalPathNode`.
 
     ``exclude`` is the set of ids the caller removes from path computation
     (completed tickets + cycle nodes). DP weight uses the 0->1 rule; ties break
@@ -168,9 +162,9 @@ def compute_critical_path(
 
         for dep_id in deps.get(node_id, []):
             sub = longest_to(dep_id)
-            # TS if/else-if collapsed: both branches assign `best = sub`, so the
-            # short-circuit `or` chain is identical (the trailing clause is the TS
-            # `else if (best.path.length === 0 && sub.minutes >= 0)`).
+            # Branches collapsed: each assigns `best = sub`, so the short-circuit
+            # `or` chain is equivalent (the trailing clause is the
+            # `best.path.length == 0 and sub.minutes >= 0` case).
             if (
                 sub.minutes > best.minutes
                 or (
@@ -189,7 +183,7 @@ def compute_critical_path(
     overall = _Candidate(path=(), minutes=0)
     for node_id in sorted(minutes_of):
         candidate = longest_to(node_id)
-        # TS if/else-if collapsed (both branches assign `overall = candidate`).
+        # Branches collapsed (each assigns `overall = candidate`).
         # Note the trailing clause is `> 0`, NOT the inner loop's `>= 0`.
         if (
             candidate.minutes > overall.minutes
@@ -215,7 +209,7 @@ def _render_node(t: TicketNode) -> CriticalPathNode:
 
     ``ticket_number`` defaults to 0 (``guardNumber``), ``title`` to the
     placeholder when missing/empty (``guardTitle``), ``estimated_minutes`` to 60
-    only when the estimate is *missing* — a literal 0 renders as 0 (TS ``?? 60``).
+    only when the estimate is *missing* — a literal 0 renders as 0.
     """
 
     return CriticalPathNode(
@@ -232,13 +226,13 @@ def compute_max_blocker_depth(
     *,
     exclude: frozenset[str] = _NO_EXCLUDE,
 ) -> int:
-    """Longest edge-counted chain of *incomplete* blockers (TS ``computeMaxBlockerDepth``).
+    """Longest edge-counted chain of *incomplete* blockers.
 
     A ``done`` dependency is satisfied: it is dropped and terminates the chain
     (depth 0). ``exclude`` (e.g. cycle nodes) is removed up front; a ``visiting``
     guard makes a residual cycle's back-edge contribute 0 so traversal always
-    terminates. Returns only ``maxDepth`` (the ``depthByTicket`` map the TS also
-    returns is unused by the summary).
+    terminates. Returns only ``max_depth`` (the per-ticket depth map is unused by
+    the summary).
     """
 
     complete_by_id: dict[str, bool] = {}
@@ -300,7 +294,7 @@ def find_cycles(
     tickets_or_ids: Iterable[TicketNode | str],
     edges: Iterable[DepEdge],
 ) -> list[list[str]]:
-    """All SCCs of size >= 2 plus self-loops (TS ``findCycles``), deterministically.
+    """All SCCs of size >= 2 plus self-loops, deterministically.
 
     Iterative Tarjan (explicit work stack, no recursion). Adjacency is
     deduped+sorted, nodes are visited in sorted id order, each returned cycle is

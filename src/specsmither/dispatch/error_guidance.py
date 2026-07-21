@@ -1,11 +1,9 @@
-"""The error-guidance layer of the dispatch facade — work item #13.
+"""The error-guidance layer of the dispatch facade.
 
-A re-authored (English) port of ``api-types/mcp/error-guidance.ts`` plus the
-``core/src/error-guidance/crud/*`` per-code composers. The TS prose is pt-BR and
-its ``next_actions`` are structured ``{tool, args?, reason?}`` objects; this port
-**re-authors the prose in English** and flattens ``next_actions`` / ``related``
-to plain English imperative sentences (``list[str]``) — the structured ``code`` /
-``context`` are language-independent and remain the load-bearing contract.
+The per-code guidance composers. Prose is authored in English and ``next_actions`` /
+``related`` are flattened to plain English imperative sentences (``list[str]``) — the
+structured ``code`` / ``context`` are language-independent and remain the load-bearing
+contract.
 
 Three public seams, all consumed by the standard-error envelope the facade emits
 (``{kind: 'standard_error', code, message, guidance, context?}``):
@@ -18,7 +16,7 @@ Three public seams, all consumed by the standard-error envelope the facade emits
   clients, plus actionable ``next_actions``).
 * :func:`normalise_error` (and the :func:`unknown_tool_guidance` pre-check) — the
   single mapper that turns a raised exception into ``(code, message, guidance,
-  context)`` for the envelope. It mirrors the TS dispatcher's branch order:
+  context)`` for the envelope. Its branch order:
   a :class:`~specsmither.operations.errors.CrudError` maps to its matching code
   and composer; any other exception (engine :class:`SpecSmitherError` or a bare
   stdlib error) falls through to ``INTERNAL``; the unknown-tool case is a
@@ -67,8 +65,8 @@ class ErrorGuidance:
     verbatim and never parse it (same convention as the lifecycle layer's
     ``PlanningAgentResponse.guidance``). ``next_actions`` are concrete English
     next-step sentences; ``related`` are optional pointers to adjacent tools. Both
-    lists are flattened to strings (the TS ``{tool, args?, reason?}`` structure is
-    folded into the sentence prose).
+    lists are flattened to strings — any ``{tool, args?, reason?}`` structure is
+    folded into the sentence prose.
     """
 
     prose: str
@@ -105,7 +103,7 @@ def _entity_copy(entity_type: str | None) -> tuple[str, str]:
 def _ctx_str(context: dict[str, object] | None, *keys: str, default: str) -> str:
     """First present, non-``None`` value among ``keys`` (camel/snake), as ``str``.
 
-    The composer accepts both the TS-origin camelCase keys (``entityId``,
+    The composer accepts both camelCase keys (``entityId``,
     ``conflictingEntityId``, …) and snake_case variants, so it works whether the
     context was synthesised here or carried on a directly-constructed
     :class:`CrudError`.
@@ -385,7 +383,7 @@ def normalise_error(
     """Map a raised exception to ``(code, message, guidance, context)``.
 
     The single assembly seam feeding the facade's standard-error envelope. Branch
-    order mirrors the TS dispatcher:
+    order:
 
     * a :class:`~specsmither.operations.errors.CrudError` maps to its matching
       :class:`ErrorGuidanceCode` (``NotFoundError`` -> ``NOT_FOUND``,

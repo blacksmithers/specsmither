@@ -1,6 +1,6 @@
 """Shared helpers for the three handover verbs — a pinned clock + a post-state view.
 
-These keep the verbs faithful and DRY without leaking any persistence: a handover verb
+These keep the verbs consistent and DRY without leaking any persistence: a handover verb
 reads the session via the port, decides the next state, *builds* a write plan, and
 composes the response from a transient post-state view of the session — it never writes.
 """
@@ -26,8 +26,8 @@ __all__ = [
 def resolve_now(ports: LifecyclePorts) -> datetime:
     """The single ``now`` instant for a handover (``ports.clock`` or UTC-now).
 
-    Mirrors the TS ``ports.clock ? ports.clock() : new Date()``. Computed once per verb
-    so every audit row + the write plan's session-update timestamps share one instant.
+    Computed once per verb so every audit row + the write plan's session-update
+    timestamps share one instant.
     """
 
     return ports.clock() if ports.clock is not None else datetime.now(tz=UTC)

@@ -1,18 +1,16 @@
 """Pure count derivations — the rollup arithmetic, recompute-from-children.
 
-Ports the PURE ``derive*`` / distinct / change-detection logic from the SpecForge
-``packages/operations/src/aggregators/counts/*`` modules. The ``apply*`` /
-atomic-ADD-delta machinery is DROPPED on purpose: SpecSmither is a single-writer
+The PURE ``derive*`` / distinct / change-detection count logic. There is no
+``apply*`` / atomic-ADD-delta machinery on purpose: SpecSmither is a single-writer
 SQLite store that recomputes each parent's denormalized counts from its children
-inside the mutation transaction (recon A5 §4 "SpecSmither recommendation"). There
-are no DynamoDB stream deltas to coalesce, so every function here takes the FULL
-child set and returns the absolute counts (frozen dataclasses whose fields are the
-snake_case ORM count columns).
+inside the mutation transaction. There are no stream deltas to coalesce, so every
+function here takes the FULL child set and returns the absolute counts (frozen
+dataclasses whose fields are the snake_case ORM count columns).
 
-Determinism (recon A5 §4):
+Determinism:
 - ``progress`` EVERYWHERE = ``floor(completed / total * 100 + 0.5)`` (half-up),
   ``0`` when ``total == 0``. NOT Python ``round`` (banker's). :func:`progress_pct`.
-- ``deriveEpicStatus`` -> ``todo | in_progress | completed`` (verbatim TS rule).
+- ``deriveEpicStatus`` -> ``todo | in_progress | completed``.
 - ``inReviewSpecCount`` folds ``{ready_for_review, in_review, reviewed}`` into one
   bucket; the six spec-status buckets + ``completed`` (``done``) partition all 8
   ``SpecStatus`` values exactly (sum == ``spec_count``).
@@ -70,11 +68,11 @@ __all__ = [
 
 
 def progress_pct(completed: int, total: int) -> int:
-    """Unified half-up progress percentage (recon A5 §4, Bug-9 formula).
+    """Unified half-up progress percentage.
 
     ``0`` when ``total == 0``; otherwise ``floor(completed / total * 100 + 0.5)``.
     Uses ``math.floor(x + 0.5)`` rather than Python ``round`` so half rounds toward
-    +inf (matching the TS ``Math.round``): ``2/3 -> 67``, ``1/8 -> 13``.
+    +inf: ``2/3 -> 67``, ``1/8 -> 13``.
     """
     if total == 0:
         return 0
@@ -111,7 +109,7 @@ def _tally_tickets(tickets: Sequence[TicketNode]) -> _TicketTally:
             active += 1
         elif status == TicketStatus.DONE:
             completed += 1
-        # Unknown statuses bucket nowhere (mirrors the TS switch with no default).
+        # Unknown statuses bucket nowhere (the switch has no default arm).
         estimated_minutes += ticket.estimated_minutes if ticket.estimated_minutes is not None else 0
     return _TicketTally(
         ticket_count=len(tickets),
@@ -171,7 +169,7 @@ def derive_epic_status(
     active_ticket_count: int,
     progress: int,
 ) -> EpicStatus:
-    """``deriveEpicStatus`` (derive-epic-counts.ts) -> ``todo|in_progress|completed``.
+    """``deriveEpicStatus`` -> ``todo|in_progress|completed``.
 
     Rule (order matters): no tickets -> ``todo``; ``progress == 100`` -> ``completed``;
     any active or completed ticket -> ``in_progress``; else ``todo`` (only pending
@@ -241,8 +239,7 @@ class SpecCountsView:
     """Per-spec input for the project rollup: status + the rolled-up child counts.
 
     A project has no tickets of its own; it aggregates from its specs' count
-    columns and buckets specs by lifecycle status. Mirrors the TS
-    ``ProjectSpecificationSnapshot``.
+    columns and buckets specs by lifecycle status (a per-spec snapshot).
     """
 
     status: SpecStatus
@@ -507,9 +504,9 @@ def derive_blueprint_counts(
 # change-detection gates (write-skip optimization)                            #
 # --------------------------------------------------------------------------- #
 # The recomputed dataclasses contain ONLY the count columns, so the generated
-# frozen-dataclass ``__eq__`` is exactly the field-wise compare the TS
-# ``has*CountsChanged`` helpers do by hand. These thin wrappers let the recompute
-# worklist (#14) skip a no-op write; recompute-from-children remains the truth.
+# frozen-dataclass ``__eq__`` is exactly the field-wise compare the
+# ``has*CountsChanged`` helpers need. These thin wrappers let the recompute
+# worklist skip a no-op write; recompute-from-children remains the truth.
 
 
 def has_epic_counts_changed(current: EpicCounts, derived: EpicCounts) -> bool:

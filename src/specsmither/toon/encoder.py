@@ -1,18 +1,18 @@
-"""TOON (Token-Oriented Object Notation) encoder — a faithful Python port of
-``@toon-format/toon`` v2.1.0's ``encode`` (the MCP agent wire format).
+"""TOON (Token-Oriented Object Notation) encoder for the TOON format v2.1.0
+(the MCP agent wire format).
 
 TOON combines YAML-style indentation for nested objects with a CSV-style tabular
 layout for uniform arrays of objects, producing a compact, lossless encoding of
-the JSON data model. This module ports the encode path **byte-for-byte** against
-the upstream TypeScript implementation; parity is pinned by the committed golden
+the JSON data model. The encode path is **byte-for-byte deterministic** and
+conforms to the TOON format spec; output is pinned by the committed golden
 fixtures under ``fixtures/golden/toon/`` (see ``tests/test_toon_golden.py``).
 
-Only ``encode`` is ported — the MCP response path is encode-only (the JSON path
-is plain ``json.dumps``). The ``replacer`` option (a JS callback) is intentionally
-omitted; ``indent``, ``delimiter``, ``key_folding`` and ``flatten_depth`` are
-supported and mirror the TS options verbatim.
+Only ``encode`` is implemented — the MCP response path is encode-only (the JSON path
+is plain ``json.dumps``). A callback-style ``replacer`` option is intentionally
+omitted; ``indent``, ``delimiter``, ``key_folding`` and ``flatten_depth`` follow
+the TOON option semantics.
 
-Byte-level subtleties replicated here:
+Byte-level subtleties the format requires:
 
 * **Number formatting** follows the ECMAScript ``Number::toString`` algorithm
   (``String(n)``), not Python's ``str(float)`` — e.g. ``0.000001`` (not
@@ -37,7 +37,7 @@ from typing import Any, Literal
 
 __all__ = ["DEFAULT_DELIMITER", "DELIMITERS", "encode"]
 
-# --- constants (mirror src/constants.ts) -------------------------------------
+# --- constants ---------------------------------------------------------------
 
 _LIST_ITEM_MARKER = "-"
 _LIST_ITEM_PREFIX = "- "
@@ -78,7 +78,7 @@ class _Options:
     flatten_depth: float
 
 
-# --- string / literal utilities (mirror string-utils.ts, validation.ts) ------
+# --- string / literal utilities ----------------------------------------------
 
 
 def _escape_string(value: str) -> str:
@@ -187,7 +187,7 @@ def _number_to_string(value: int | float) -> str:
     return _js_float_to_string(value)
 
 
-# --- primitive / key encoding (mirror encode/primitives.ts) ------------------
+# --- primitive / key encoding ------------------------------------------------
 
 
 def _encode_primitive(value: Any, delimiter: str) -> str:
@@ -233,7 +233,7 @@ def _format_header(
     return header
 
 
-# --- value-shape predicates (mirror encode/normalize.ts) ---------------------
+# --- value-shape predicates --------------------------------------------------
 
 
 def _is_json_primitive(value: Any) -> bool:
@@ -289,7 +289,7 @@ def _normalize_value(value: Any) -> Any:
     return None
 
 
-# --- key folding (mirror encode/folding.ts) ----------------------------------
+# --- key folding -------------------------------------------------------------
 
 
 def _collect_single_key_chain(
@@ -339,7 +339,7 @@ def _try_fold_key_chain(
     return folded_key, tail, leaf_value, len(segments)
 
 
-# --- core encoders (mirror encode/encoders.ts) -------------------------------
+# --- core encoders -----------------------------------------------------------
 
 
 def _indented_line(depth: int, content: str, indent_size: int) -> str:
@@ -637,19 +637,19 @@ def encode(
 ) -> str:
     """Encode a JSON-compatible value into a TOON-format string.
 
-    Mirrors ``@toon-format/toon``'s ``encode``: the value is normalized to the
-    JSON data model, then emitted as TOON lines joined by ``"\\n"``.
+    The value is normalized to the JSON data model, then emitted as TOON lines
+    joined by ``"\\n"``.
 
     Args:
         value: Any JSON-compatible value (dict, list, str, int, float, bool,
             None; tuples are treated as arrays).
-        indent: Spaces per indentation level (TS ``indent``, default 2).
+        indent: Spaces per indentation level (default 2).
         delimiter: Row/inline-array delimiter — ``","``, ``"\\t"`` or ``"|"``
-            (TS ``delimiter``, default ``","``).
+            (default ``","``).
         key_folding: ``"off"`` or ``"safe"`` — collapse single-key wrapper
-            chains into dotted paths (TS ``keyFolding``, default ``"off"``).
+            chains into dotted paths (default ``"off"``).
         flatten_depth: Maximum segments to fold when ``key_folding="safe"``
-            (TS ``flattenDepth``, default unbounded).
+            (default unbounded).
 
     Returns:
         The TOON-encoded string (no trailing newline).

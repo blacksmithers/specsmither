@@ -1,17 +1,14 @@
 """The verb response shape — :class:`PlanningAgentResponse` + its sub-blocks.
 
-A faithful-but-widened port of the TS ``PlanningAgentResponse`` (session-types
-``lifecycle-contract.ts:22-31``). The TS shape is deliberately flat — eight scalar
-fields plus a single ``guidance`` prose string — because the AppSync resolver echoes
-it verbatim into the ``McpLifecycleEnvelope`` (``api-types/mcp/lifecycle-envelope.ts``)
+The response shape is deliberately flat — eight scalar
+fields plus a single ``guidance`` prose string — because the MCP layer echoes
+it into the ``McpLifecycleEnvelope``
 and the client reads the typed score / gate / phase / status fields directly, never
 parsing the prose.
 
-This port keeps every TS scalar (renamed snake-case: ``sessionId`` → ``session_id``,
-``planningPhase`` → ``phase``, ``planningStatus`` → ``status``, ``scoreLocal`` →
-``score``, ``scoreGlobal`` → ``score_global``, ``gatePassed`` →
-:attr:`PlanningAgentResponse.gate_passed`) and adds the structured side-blocks the L5
-MCP layer will surface alongside the prose:
+The scalar fields are snake-case (``session_id`` / ``phase`` / ``status`` /
+``score`` / ``score_global`` / :attr:`PlanningAgentResponse.gate_passed`), and the
+structured side-blocks the L5 MCP layer will surface alongside the prose are:
 
 * ``next_entities`` — the expansion-phase "what to work on next" list, already capped
   by ``guidance.maxNextEntitiesToShow`` at compose time.
@@ -50,11 +47,11 @@ GateResult = Literal["pass", "fail"]
 
 @dataclass(frozen=True)
 class RecommendedMove:
-    """One finding-derived next-step hint (``ProcessGuidance.recommendedMoves[]``).
+    """One finding-derived next-step hint (a recommended move).
 
     ``operation`` is the :data:`PlanningOperationName` the agent should call to clear
     the finding (resolved from the finding ``path`` by the audit operation-mapper);
-    ``rationale`` is the finding's English message, surfaced verbatim.
+    ``rationale`` is the finding's English message, surfaced unchanged.
     """
 
     operation: str
@@ -78,7 +75,7 @@ class NextEntity:
 
 @dataclass(frozen=True)
 class FindingSummary:
-    """A summarized validator finding (the ``ProcessGuidance.findings`` block, flattened).
+    """A summarized validator finding (the findings block, flattened).
 
     Carries only what the agent needs to act: the coarse ``category``, the English
     ``message``, the ``severity`` (``'finding'`` advisory vs. ``'denial'`` blocking), and
@@ -96,12 +93,12 @@ class FindingSummary:
 class PlanningAgentResponse:
     """The response every planning verb returns, on BOTH success and denial branches.
 
-    The scalar head mirrors the TS ``PlanningAgentResponse`` (so the L5 envelope can echo
+    The scalar head is flat (so the L5 envelope can echo
     it field-for-field); the list tail (``next_entities`` / ``recommended_moves`` /
     ``findings``) carries the structured guidance the MCP client renders next to the
     prose. ``score`` is the spec-local score; ``score_global`` is the project-wide score
     when available. ``gate_result`` is the surfaced binary verdict — read
-    :attr:`gate_passed` for the TS ``gatePassed`` boolean.
+    :attr:`gate_passed` for the boolean form.
     """
 
     outcome: Outcome
@@ -123,7 +120,7 @@ class PlanningAgentResponse:
 
     @property
     def gate_passed(self) -> bool | None:
-        """The TS ``gatePassed`` boolean: ``None`` when the gate has not been evaluated."""
+        """The gate-passed boolean: ``None`` when the gate has not been evaluated."""
 
         if self.gate_result is None:
             return None

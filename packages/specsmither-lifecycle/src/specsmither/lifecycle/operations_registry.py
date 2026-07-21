@@ -1,6 +1,6 @@
 """The per-operation phase-guard table — the 15-op registry + classifier.
 
-Verbatim port of ``planning/operations-registry.ts`` (A1 §1.2). Pure: a static
+Pure: a static
 data table plus two functions, no I/O, no dependencies beyond the
 :class:`~specsmither.domain.enums.PlanningPhase` vocabulary.
 
@@ -17,9 +17,9 @@ running an operation: ``forbidden`` (reject), ``native`` (home phase — proceed
 or ``late`` (allowed, but the caller is working past the native phase, which
 triggers a phase rollback elsewhere in the lifecycle).
 
-Faithful-port notes (values that affect outputs, replicated verbatim):
+Notes on values that affect outputs:
 
-* ``create_dependencies`` carries ``max_batch == 5000`` (the M7.7 bump — **not**
+* ``create_dependencies`` carries ``max_batch == 5000`` (**not**
   100): real planning sessions ship a full dependency graph in one shot, and the
   batch pre-check dedups + cycle-checks before any write.
 * ``delete_epic`` / ``delete_ticket`` carry a ``minCount`` guard (at least one
@@ -56,8 +56,7 @@ __all__ = [
 # Vocabulary                                                                   #
 # --------------------------------------------------------------------------- #
 
-#: Every planning operation name (mutating + read-only + synthetic). Mirrors the
-#: TS ``PlanningOperationName`` union (session-types ``PLANNING_OPERATIONS``).
+#: Every planning operation name (mutating + read-only + synthetic).
 PlanningOperationName = Literal[
     # mutating
     "update_spec",
@@ -191,7 +190,7 @@ _ALL_PHASES: Final[tuple[PlanningPhase, ...]] = (
 def _phases_before(end: PlanningPhase) -> tuple[PlanningPhase, ...]:
     """Phases from the start up to (and excluding) ``end``.
 
-    Mirrors the TS ``phasesBefore``: ``indexOf(end) <= 0`` yields ``()``.
+    ``index(end) <= 0`` yields ``()``.
     """
 
     try:
@@ -315,7 +314,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         ),
     ),
     # 8. create_blueprint — native: epic_decomposition; forbidden in planning_spec.
-    #    ME.10.4 — NO guard: the blueprint:epic ratio is a delete-side hard-deny only.
+    #    NO guard: the blueprint:epic ratio is a delete-side hard-deny only.
     "create_blueprint": OperationDef(
         name="create_blueprint",
         kind="mutating",
@@ -371,7 +370,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         description="Unlink a blueprint from one or more tickets during cross_validation.",
     ),
     # 13. create_dependencies — native: cross_validation; forbidden in all phases before it;
-    #     max_batch = 5000 (M7.7 — not 100).
+    #     max_batch = 5000 (not 100).
     "create_dependencies": OperationDef(
         name="create_dependencies",
         kind="mutating",
@@ -393,7 +392,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         multi_actor=False,
         description="Delete dependency links between tickets during cross_validation.",
     ),
-    # 15. get_planning_status — any phase, always native, never forbidden (M6.6).
+    # 15. get_planning_status — any phase, always native, never forbidden.
     "get_planning_status": OperationDef(
         name="get_planning_status",
         kind="read-only",
@@ -421,8 +420,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
 def _assert_non_synthetic_ops_present() -> None:
     """Exhaustivity check: every mutating/read-only op has a non-null def.
 
-    Mirrors the TS IIFE (operations-registry.ts:282-292) — guards against a key
-    silently dropping out of :data:`OPERATIONS`.
+    Guards against a key silently dropping out of :data:`OPERATIONS`.
     """
 
     for op in (*PLANNING_MUTATING_OPERATIONS, *PLANNING_READ_ONLY_OPERATIONS):

@@ -1,7 +1,7 @@
-"""``reject_handover_with_feedback`` — reject a parked session, stash feedback (A1 §4.2).
+"""``reject_handover_with_feedback`` — reject a parked session, stash feedback.
 
-Ported from ``verbs/reject-handover-with-feedback.ts``. A separate (non-dispatch)
-entrypoint. Validates that ``feedback`` is a non-empty string (else ``INVALID_FEEDBACK``),
+A separate (non-dispatch) entrypoint. Validates that ``feedback`` is a non-empty
+string (else ``INVALID_FEEDBACK``),
 flips the session back to ``'active'`` and stashes ``pending_human_feedback`` =
 ``{content, recorded_at, recorded_by_user_id}`` for one-shot delivery to the agent on its
 next ``get_planning_status`` poll; ``last_transition_trigger = 'human_reject_with_feedback'``

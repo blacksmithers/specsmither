@@ -1,36 +1,30 @@
 """Pre-check: is the phase gate currently passing? (the CPS gate)
 
-Port of ``planning/pre-checks/gate-currently-passing.ts`` (A1 §1.4, §3.3) with
-the cache TTL **removed** (locked decision 3: ALWAYS re-validate) and the gate
-decision routed through the **phase-gate evaluator** rather than the validator's
-composite ``gate_result``.
-
-The TS source trusts ``session.lastGateResult == 'pass'`` while a 5-minute TTL
-(``gateResultCacheTtlMs``) is unexpired, re-validating only when stale or
-non-passing. Locally, validation is in-process and cheap, so the staleness knob
-adds risk (a human edit can break a "fresh" gate) for no benefit: this port
-**drops** ``Date.now()`` / ``gateResultCacheTtlMs`` entirely and always
-re-validates. ``session.last_gate_result`` / ``last_validated_at`` are never
+The gate decision is routed through the **phase-gate evaluator** rather than the
+validator's composite ``gate_result``, and it **always** re-validates: there is no
+cache TTL. Validation is in-process and cheap, so trusting a cached
+``session.last_gate_result`` would only add risk (a human edit can break a "fresh"
+gate) for no benefit. ``session.last_gate_result`` / ``last_validated_at`` are never
 trusted here.
 
-**Simulator find (2026-07-13): the CPS gate must use the phase-gate evaluator,
-not the raw validator ``gate_result``.** The TS ``lastGateResult`` the cache
-trusts is written by ``evaluatePhaseGate`` (:func:`evaluate_phase_gate`), whose
-verdict for the two ``*_expansion`` phases is the spec-wide **per-entity
-all-pass** (every epic/ticket ≥ its threshold) and deliberately does **not**
-fold in the global cascade. The cascade — the weighted global score including the
-topology penalty for the ticket dependency DAG — is enforced only where
-``evaluatePhaseGate`` defers to ``validator.gateResult``: ``planning_spec``, the
-``*_decomposition`` phases, and **``cross_validation``** (the phase where the
-persona wires the DAG). Reading ``output.gate_result`` directly here — as this
-port originally did — wrongly applies the cascade to ``ticket_expansion``, so a
-spec whose every ticket scores 100 but whose tickets are still islands (global
-score 0 before the DAG is wired) can never complete ``ticket_expansion`` — the
-loop stalls one phase early. Routing through :func:`evaluate_phase_gate` restores
-the SpecForge semantics on every (always-fresh) re-validation.
+**The CPS gate must use the phase-gate evaluator, not the raw validator
+``gate_result``.** The ``last_gate_result`` written on a session comes from
+:func:`evaluate_phase_gate`, whose verdict for the two ``*_expansion`` phases is the
+spec-wide **per-entity all-pass** (every epic/ticket ≥ its threshold) and
+deliberately does **not** fold in the global cascade. The cascade — the weighted
+global score including the topology penalty for the ticket dependency DAG — is
+enforced only where :func:`evaluate_phase_gate` defers to the validator's
+``gate_result``: ``planning_spec``, the ``*_decomposition`` phases, and
+**``cross_validation``** (the phase where the DAG is wired). Reading
+``output.gate_result`` directly here would wrongly apply the cascade to
+``ticket_expansion``, so a spec whose every ticket scores 100 but whose tickets are
+still islands (global score 0 before the DAG is wired) could never complete
+``ticket_expansion`` — the loop would stall one phase early. Routing through
+:func:`evaluate_phase_gate` keeps the phase semantics consistent on every
+(always-fresh) re-validation.
 
-Because the lifecycle ``config`` argument existed solely to carry the now-removed
-TTL, it is dropped from the signature (the L4 caller must NOT pass it).
+The lifecycle ``config`` argument is intentionally absent from the signature (the L4
+caller must NOT pass it).
 
 A non-passing gate → :class:`Denied` (``gate_not_passed``) carrying the failing
 findings' messages as ``blockers`` so the denial can surface the CURRENT blockers.
@@ -56,7 +50,7 @@ def _entity_scoreboard(
     spec_full: SpecFull,
     validator_config: Mapping[str, Any],
 ) -> list[str]:
-    """MB.1.4 — a FAIL-first per-entity scoreboard for the scored expansion phases.
+    """A FAIL-first per-entity scoreboard for the scored expansion phases.
 
     Names each epic/ticket still below its threshold with its score, so the agent knows
     EXACTLY which entities to expand instead of guessing (the single biggest lever for
@@ -146,7 +140,7 @@ def gate_currently_passing(
                 "gate_result": output.gate_result,
                 "phase": phase.value,
             },
-            # MB.1.4 — lead with the per-entity scoreboard (which entities are short), then the
+            # Lead with the per-entity scoreboard (which entities are short), then the
             # per-finding blockers (what to add). Empty scoreboard for the non-expansion phases.
             blockers=[*scoreboard, *(f.message for f in output.findings)],
         )

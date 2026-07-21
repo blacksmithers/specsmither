@@ -1,37 +1,34 @@
-"""Read/query primitives (work item #19) — the M0 read surface.
+"""Read/query primitives — the M0 read surface.
 
-A clean rewrite of the @specforge/operations READ handlers over the SQLite stores:
-``operations/{specifications,epics,tickets,projects}.ts`` (entity reads/lists),
-``operations/context.ts`` (actionable / blocked / critical-path) and
-``operations/tree.ts`` (the cached dependency tree). These are READ-ONLY: every
-function opens a short-lived ``session_factory()`` read session, reads through the
-stores, and NEVER runs the recompute worklist (only the CRUD mutations do — they
-own their own ``Session.begin()``). The MCP ``get``/``list`` composers that fan out
-by ``{type}`` and the dispatch facade are a 0.1.0 concern and live elsewhere.
+The READ surface over the SQLite stores: entity reads/lists for specifications,
+epics, tickets and projects, context queries (actionable / blocked / critical-path)
+and the cached dependency tree. These are READ-ONLY: every function opens a
+short-lived ``session_factory()`` read session, reads through the stores, and NEVER
+runs the recompute worklist (only the CRUD mutations do — they own their own
+``Session.begin()``). The MCP ``get``/``list`` composers that fan out by ``{type}``
+and the dispatch facade are a 0.1.0 concern and live elsewhere.
 
-Three faithful-port machines, ported verbatim from ``api-types/runtime``:
+Three shared read machines:
 
 * **Field selection** (:func:`_select_fields` + the ``*_FIELDS`` allow-lists) — a
   list read projects each record to the wire (camelCase) shape and keeps only the
   requested fields (``id`` is always forced in); unknown fields are reported in
-  ``invalid_fields`` (the TS ``FieldSelectionWarning``). No ``fields`` requested
-  returns the full record dump (a sensible full set).
-* **Pagination** (:func:`_paginate` + ``DEFAULT_LIMIT``) — the TS ``paginateArray``
-  is offset-based, so the SQLite port loads the bounded per-parent list and slices
-  ``items[offset:offset+limit]``. The opaque ``next_cursor`` encodes the resume
-  offset (an offset cursor); page two continues from it. ``limit`` is clamped to
-  ``[1, MAX_LIMIT]`` exactly as ``normalizePaginationInput``.
-* **Summary vs full** (``summary`` flag, default ``True`` — the TS
-  ``isSummaryMode`` returns ``summary !== false``, i.e. summary is the default) —
-  a single entity get returns either a small summary DTO (a few fields) or the
+  ``invalid_fields``. No ``fields`` requested returns the full record dump (a
+  sensible full set).
+* **Pagination** (:func:`_paginate` + ``DEFAULT_LIMIT``) — offset-based: load the
+  bounded per-parent list and slice ``items[offset:offset+limit]``. The opaque
+  ``next_cursor`` encodes the resume offset (an offset cursor); page two continues
+  from it. ``limit`` is clamped to ``[1, MAX_LIMIT]``.
+* **Summary vs full** (``summary`` flag, default ``True`` — summary is the default)
+  — a single entity get returns either a small summary DTO (a few fields) or the
   full record.
 
 Context + tree are served STRICTLY from the materialized ``Specification.
-dependency_tree`` JSON column (built by the recompute worklist). The TS in-memory
-fallbacks are intentionally DROPPED (recon A3 §4): the cached tree is the single
-source of truth, so ``getNextActionableTickets`` / ``getBlockedTickets`` /
-``_getCriticalPath`` / ``getDependencyTreeCached`` all read the same column. A spec
-that has never been recomputed (no tree) raises :class:`PreconditionFailedError`.
+dependency_tree`` JSON column (built by the recompute worklist). There is no
+in-memory fallback: the cached tree is the single source of truth, so the
+actionable / blocked / critical-path / dependency-tree reads all read the same
+column. A spec that has never been recomputed (no tree) raises
+:class:`PreconditionFailedError`.
 """
 
 from __future__ import annotations
@@ -91,15 +88,14 @@ __all__ = [
 
 _T = TypeVar("_T")
 
-#: Default / max page size (``api-types/runtime/pagination.ts``).
+#: Default / max page size.
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 
-# Field-selection allow-lists, ported verbatim from ``api-types/runtime/fields.ts``
-# (the selectable wire/camelCase keys). A list read may project to any subset; ``id``
-# is always forced in. ``PROJECT_FIELDS`` has no TS counterpart (projects.ts has no
-# field selection) — it is the wire-key set of ``ProjectRecord``, added so the
-# project list shares the uniform field-selection surface.
+# Field-selection allow-lists (the selectable wire/camelCase keys). A list read may
+# project to any subset; ``id`` is always forced in. ``PROJECT_FIELDS`` is the
+# wire-key set of ``ProjectRecord`` — projects have no per-field selection of their
+# own, so this lets the project list share the uniform field-selection surface.
 SPECIFICATION_FIELDS: tuple[str, ...] = (
     "id", "projectId", "specificationTypeId", "schemaVersion", "title", "description",
     "background", "status", "progress", "goals", "requirements",
@@ -286,7 +282,7 @@ def _decode_cursor(cursor: str) -> int:
 
 
 def _clamp_limit(limit: int | None) -> int:
-    """Clamp ``limit`` into ``[1, MAX_LIMIT]`` (TS ``normalizePaginationInput``)."""
+    """Clamp ``limit`` into ``[1, MAX_LIMIT]``."""
     value = DEFAULT_LIMIT if limit is None else limit
     return max(1, min(value, MAX_LIMIT))
 
@@ -301,7 +297,7 @@ def _resolve_offset(*, offset: int, cursor: str | None) -> int:
 def _paginate(
     rows: Sequence[_T], *, limit: int, offset: int
 ) -> tuple[list[_T], int, bool, str | None]:
-    """Offset-slice ``rows`` (TS ``paginateArray``); derive ``has_more`` + the cursor."""
+    """Offset-slice ``rows``; derive ``has_more`` + the cursor."""
     total = len(rows)
     page = list(rows[offset : offset + limit])
     has_more = offset + limit < total
@@ -319,11 +315,11 @@ def _select_fields(
     fields: Sequence[str] | None,
     valid_fields: tuple[str, ...],
 ) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
-    """Project records to wire dicts, keeping only requested fields (TS ``selectFields``).
+    """Project records to wire dicts, keeping only requested fields.
 
     No ``fields`` → the full wire dump. Otherwise: ``id`` is forced in, unknown
     fields are reported (``invalid_fields``), and only the fields actually present
-    on a record survive (mirrors the TS ``field in item`` guard).
+    on a record survive.
     """
     wire = [_to_wire(record) for record in records]
     if not fields:
@@ -363,7 +359,7 @@ def _build_page(
 
 
 def _require_id(value: str, name: str) -> None:
-    """Reject a missing/empty required id argument (TS ``ValidationFailedError``)."""
+    """Reject a missing/empty required id argument."""
     if not value:
         raise ValidationFailedError(f"{name} is required and must be a non-empty string")
 
@@ -381,8 +377,8 @@ def get_specification(
 ) -> SpecificationRecord | SpecificationSummary:
     """Read one specification — the summary projection (default) or the full record.
 
-    ``summary`` defaults to ``True`` to match the TS ``isSummaryMode`` (summary is
-    the default; pass ``summary=False`` for the full record). Raises
+    ``summary`` defaults to ``True`` (summary is the default; pass
+    ``summary=False`` for the full record). Raises
     :class:`~specsmither.operations.errors.NotFoundError` when the id resolves nothing.
     """
     _require_id(specification_id, "specificationId")
@@ -522,8 +518,8 @@ def list_tickets(
 
     Either ``epic_id`` or ``specification_id`` is required. An optional ``status``
     filter keeps only tickets whose status is in the (valid) set, applied in Python
-    after the gather (TS ``parseStatusFilter`` semantics: unknown values are
-    dropped, an all-invalid/empty filter is a no-op).
+    after the gather: unknown values are dropped, an all-invalid/empty filter is a
+    no-op.
     """
     if not epic_id and not specification_id:
         raise ValidationFailedError("Either epicId or specificationId is required")
@@ -597,7 +593,7 @@ def _load_tree(session_factory: sessionmaker[Session], specification_id: str) ->
 
     Raises :class:`~specsmither.operations.errors.NotFoundError` for a missing spec
     and :class:`PreconditionFailedError` for a spec that has never been recomputed
-    (no materialized tree). The TS in-memory fallback walks are intentionally dropped.
+    (no materialized tree). There is no in-memory fallback walk.
     """
     _require_id(specification_id, "specificationId")
     with session_factory() as session:
@@ -619,7 +615,7 @@ def get_next_actionable_tickets(
 ) -> ActionableResult:
     """The READY tickets, served from ``tree.summary.ready_tickets`` (capped to ``limit``).
 
-    ``total`` is the full ready count (not the capped slice), matching the TS fast path.
+    ``total`` is the full ready count (not the capped slice).
     """
     tree = _load_tree(session_factory, specification_id)
     tickets = tree["tickets"]
@@ -705,9 +701,9 @@ def get_dependency_tree(
     session_factory: sessionmaker[Session],
     specification_id: str,
 ) -> dict[str, Any]:
-    """Return the cached ``Specification.dependency_tree`` JSON (``getDependencyTreeCached``).
+    """Return the cached ``Specification.dependency_tree`` JSON.
 
-    Serves the column verbatim — the tree was materialized by the recompute worklist;
+    Serves the column directly — the tree was materialized by the recompute worklist;
     no work happens here beyond reading it (and the not-generated precondition guard).
     """
     return _load_tree(session_factory, specification_id)

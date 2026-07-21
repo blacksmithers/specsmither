@@ -1,7 +1,7 @@
 """``*StoreSqlite`` repositories for the core spine entities.
 
-The third store implementation set (after the TS ``appsync-impl`` / ``json-impl``),
-drop-in via the same DI bag. Covers the five entities whose array fields are stored
+The SQLite store implementation set, drop-in via the same DI bag. Covers the five
+entities whose array fields are stored
 as JSON columns rather than child tables, so each ORM row maps **directly** to its
 ``domain.records`` DTO (no decompose / recompose):
 
@@ -17,16 +17,16 @@ Two contract rules (architecture §4, invariants 3+4):
    :class:`~specsmither.db.repositories.base.SessionStore` and runs inside the
    caller's ``Session.begin()``. Writes ``flush`` (to assign ULIDs / surface
    constraint violations) but NEVER ``commit`` / ``begin``.
-2. **Count + derived columns are never written here.** The TS ``updateX*Count``
+2. **Count + derived columns are never written here.** The ``updateX*Count``
    delta-mutator family is implemented as no-ops; the denormalized counts, the
    cached ``dependency_tree``, the graph metrics, ``progress`` and (for epics)
-   ``status`` are materialized only by the recompute worklist (#14). Validator
+   ``status`` are materialized only by the recompute worklist. Validator
    cache columns (``last_validator_output`` …) are read-through but written by the
    assay adapter, not here.
 
 The projection variants (``listXForDashboard`` / ``ForReadiness`` / ``ForGateCheck``)
-collapse into one ``get_x`` + one ``list_x`` — DynamoDB projection economy is moot
-in SQLite. Auth is dropped (single local user); the only existence check is the
+collapse into one ``get_x`` + one ``list_x`` — projection economy is moot in SQLite.
+There is no auth (single local user); the only existence check is the
 ``None`` → :class:`~specsmither.operations.errors.NotFoundError` seam.
 """
 
@@ -119,8 +119,8 @@ class ProjectRecord(BaseModel):
     There is no ``ProjectRecord`` in :mod:`crucible` (projects are a SpecSmither
     container), so it is defined here following the same camelCase-alias convention
     as the other ``domain.records`` DTOs. ``progress`` is deliberately absent
-    (recon A5: project progress is derived read-side, never persisted). The count
-    columns are read-through but recompute-owned (#14).
+    (project progress is derived read-side, never persisted). The count columns are
+    read-through but recompute-owned.
     """
 
     model_config = ConfigDict(
@@ -187,7 +187,7 @@ def _apply_project(obj: Project, rec: ProjectRecord, *, creating: bool) -> None:
 
 
 class ProjectStoreSqlite(SessionStore):
-    """``projects`` CRUD. Counts are read-through but written only by recompute (#14)."""
+    """``projects`` CRUD. Counts are read-through but written only by recompute."""
 
     def get_project(self, project_id: str) -> ProjectRecord:
         obj = require_found(
@@ -230,39 +230,39 @@ class ProjectStoreSqlite(SessionStore):
         self.session.delete(obj)
         _flush(self.session, intent="delete")
 
-    # --- @aggregator-only delta-mutators -> no-ops (counts owned by recompute #14) ---
+    # --- aggregator-only delta-mutators -> no-ops (counts owned by recompute) ---
     def update_project_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_completed_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_draft_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_planning_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_ready_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_in_progress_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_in_review_spec_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_epic_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_completed_epic_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_ticket_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_completed_ticket_count(self, project_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_project_member_count(self, project_id: str, delta: int) -> None:
         """No-op: sharing is dropped (single local user); no ``member_count`` column."""
@@ -351,7 +351,7 @@ def _apply_spec(obj: Specification, rec: SpecificationRecord, *, creating: bool)
 
 class SpecStoreSqlite(SessionStore):
     """``specifications`` CRUD. JSON content columns round-trip; counts / tree /
-    graph-metrics / validator-cache columns are read-through but recompute-owned (#14)."""
+    graph-metrics / validator-cache columns are read-through but recompute-owned."""
 
     def get_specification(self, spec_id: str) -> SpecificationRecord:
         obj = require_found(
@@ -396,45 +396,45 @@ class SpecStoreSqlite(SessionStore):
         self.session.delete(obj)
         _flush(self.session, intent="delete")
 
-    # --- @aggregator-only delta-mutators -> no-ops (owned by recompute #14) ---
+    # --- aggregator-only delta-mutators -> no-ops (owned by recompute) ---
     def update_specification_epic_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_todo_epic_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_in_progress_epic_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_completed_epic_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_ticket_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_completed_ticket_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_pending_ticket_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_ready_ticket_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_active_ticket_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_estimated_minutes(self, spec_id: str, delta: int) -> None:
-        """No-op: estimated minutes are derived by the recompute worklist (#14)."""
+        """No-op: estimated minutes are derived by the recompute worklist."""
 
     def update_specification_dependency_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_blueprint_count(self, spec_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_specification_progress(self, spec_id: str, progress: int) -> None:
-        """No-op: ``progress`` is derived by the recompute worklist (#14)."""
+        """No-op: ``progress`` is derived by the recompute worklist."""
 
 
 # --------------------------------------------------------------------------- #
@@ -513,7 +513,7 @@ def _apply_epic(obj: Epic, rec: EpicRecord, *, creating: bool) -> None:
 
 
 class EpicStoreSqlite(SessionStore):
-    """``epics`` CRUD. ``status`` / ``progress`` / counts are recompute-owned (#14)."""
+    """``epics`` CRUD. ``status`` / ``progress`` / counts are recompute-owned."""
 
     def get_epic(self, epic_id: str) -> EpicRecord:
         obj = require_found(self.session.get(Epic, epic_id), kind="epic", entity_id=epic_id)
@@ -550,35 +550,35 @@ class EpicStoreSqlite(SessionStore):
         self.session.delete(obj)
         _flush(self.session, intent="delete")
 
-    # --- @aggregator-only delta-mutators -> no-ops (owned by recompute #14) ---
+    # --- aggregator-only delta-mutators -> no-ops (owned by recompute) ---
     def update_epic_ticket_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_pending_ticket_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_ready_ticket_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_active_ticket_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_completed_ticket_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_estimated_minutes(self, epic_id: str, delta: int) -> None:
-        """No-op: estimated minutes are derived by the recompute worklist (#14)."""
+        """No-op: estimated minutes are derived by the recompute worklist."""
 
     def update_epic_dependency_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_blueprint_count(self, epic_id: str, delta: int) -> None:
-        """No-op: count columns are written only by the recompute worklist (#14)."""
+        """No-op: count columns are written only by the recompute worklist."""
 
     def update_epic_computed_fields(
         self, epic_id: str, *, status: str | None = None, progress: int | None = None
     ) -> None:
-        """No-op: ``status`` / ``progress`` are derived by the recompute worklist (#14)."""
+        """No-op: ``status`` / ``progress`` are derived by the recompute worklist."""
 
 
 # --------------------------------------------------------------------------- #
@@ -689,7 +689,7 @@ def _dep_to_edge(obj: TicketDependency) -> DependencyEdge:
 class TicketDependencyStoreSqlite(SessionStore):
     """``ticket_dependencies`` edges (directed ``ticket → depends_on``).
 
-    No cycle check here — that lives in the CRUD ``add_dependency`` verb (#18). The
+    No cycle check here — that lives in the CRUD ``add_dependency`` verb. The
     ``UNIQUE(ticket_id, depends_on_id)`` collision is mapped to a ``ConflictError``.
     """
 

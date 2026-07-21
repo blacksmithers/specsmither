@@ -1,6 +1,6 @@
-"""The phase gate evaluator — the keystone pure composition (A1 §1.6).
+"""The phase gate evaluator — the keystone pure composition.
 
-Faithful port of ``planning/compositions/phase-gate-evaluator.ts``. The gate is
+The gate is
 deliberately **thin**: it does not itself recompute cascade / structural / N-A
 rubric logic — all of that lives inside the validator (crucible). For the binary
 phases (``planning_spec`` / the two ``*_decomposition`` phases / ``cross_validation``)
@@ -22,12 +22,11 @@ Beyond the binary verdict the gate emits two side products:
   ``ticket_field_updated`` / ``cross_val_recompute``). ``cross_validation``
   emits a *full refresh*: the spec plus **every** epic and ticket.
 
-The TS ``sessionLastGateResult`` field is dropped — it only ever mirrored
-``gateOutcome``; the L3 session write reads :attr:`PhaseGateResult.gate_outcome`
-directly.
+A separate ``sessionLastGateResult`` field is not carried — it would only ever
+mirror the gate outcome; the L3 session write reads
+:attr:`PhaseGateResult.gate_outcome` directly.
 
-The nested TS ``touchedEntityIds: {epics?, tickets?, spec?}`` collapses to a flat
-``touched_entity_ids`` collection: it holds the touched epic ids in
+``touched_entity_ids`` is a flat collection: it holds the touched epic ids in
 ``epic_expansion``, the touched ticket ids in ``ticket_expansion``, and the spec
 id in ``planning_spec`` / ``cross_validation`` (the spec-level write target). The
 ``*_decomposition`` and ``planned`` phases ignore it.
@@ -59,10 +58,10 @@ __all__ = [
 
 @dataclass(frozen=True)
 class EntityVerdict:
-    """Per-entity verdict for an expansion-phase gate (``EntityVerdict``, lines 22-28).
+    """Per-entity verdict for an expansion-phase gate (``EntityVerdict``).
 
     Only the two ``*_expansion`` phases populate verdicts; the binary phases
-    return ``[]``. ``verdict`` (the TS ``status``) is ``pass`` when the entity's
+    return ``[]``. ``verdict`` is ``pass`` when the entity's
     score cleared its phase threshold, else ``review_needed``. ``review_hints``
     are the validator findings' messages grouped by ``entity_id`` — the L4
     guidance composer renders them under each entity.
@@ -77,7 +76,7 @@ class EntityVerdict:
 
 @dataclass(frozen=True)
 class EntityScoreWrite:
-    """A score-datapoint write the WritePlan builders persist (``ScoreWriteEntry``, lines 30-35).
+    """A score-datapoint write the WritePlan builders persist (``ScoreWriteEntry``).
 
     ``trigger`` is a :class:`~specsmither.domain.enums.DatapointTrigger` baked in
     per phase (``metadata_updated`` / ``epic_field_updated`` /
@@ -94,12 +93,12 @@ class EntityScoreWrite:
 
 @dataclass(frozen=True)
 class PhaseGateResult:
-    """The gate verdict + its side products (``PhaseGateResult``, lines 37-43).
+    """The gate verdict + its side products (``PhaseGateResult``).
 
     ``gate_outcome`` is the binary lifecycle verdict; ``entity_verdicts`` is
     populated only for the expansion phases; ``rationale`` is human-readable
     prose for guidance/audit; ``entity_score_writes`` are the datapoint writes
-    L3 persists. (The TS ``sessionLastGateResult`` mirror is dropped — read
+    L3 persists. (There is no separate ``sessionLastGateResult`` mirror — read
     ``gate_outcome`` directly.)
     """
 
@@ -118,8 +117,8 @@ def _ordered(ids: Iterable[str] | None) -> list[str]:
     """Normalise an id collection to a deterministic list.
 
     A ``set`` / ``frozenset`` is sorted (set iteration order is not stable across
-    processes); a list/tuple keeps the caller's explicit order (it mirrors the TS
-    arrays, which carry meaningful order). ``None`` collapses to ``[]``.
+    processes); a list/tuple keeps the caller's explicit order (which carries
+    meaning). ``None`` collapses to ``[]``.
     """
 
     if ids is None:

@@ -1,11 +1,10 @@
-"""Planning-session ORM models (the 5 planning tables; architecture §3, recon A6).
+"""Planning-session ORM models (the 5 planning tables; architecture §3).
 
-Faithful port of the SpecForge ``session-types`` planning entities, corrected for
-SpecSmither: the cloud-only ``projectId`` denormalization is dropped (the project
-is reachable via ``specification_id`` → spec → project), userId fields collapse to
-the single local user, and the gate-cache TTL is gone (the validator output is
-still persisted for ``inspect`` / ``get_planning_status`` display but never trusted
-as a cache — architecture §6).
+The planning-session entities, shaped for SpecSmither: there is no cloud-only
+``projectId`` denormalization (the project is reachable via ``specification_id`` →
+spec → project), userId fields collapse to the single local user, and there is no
+gate-cache TTL (the validator output is still persisted for ``inspect`` /
+``get_planning_status`` display but never trusted as a cache — architecture §6).
 
 The five tables:
 
@@ -19,9 +18,9 @@ The five tables:
 * :class:`PlanningSessionAggregate` — the materialized projection (PK =
   ``planning_session_id``), rebuilt in-txn via ``computeAggregateUpdate``.
 
-Statuses / phases / triggers are stored as their verbatim ``StrEnum`` ``.value``
-strings (loose ``String`` columns, typed ``Mapped[str]``) so they round-trip with
-the TS/JSON wire; nullable enum columns default to ``NULL``. JSON columns use the
+Statuses / phases / triggers are stored as their ``StrEnum`` ``.value`` strings
+(loose ``String`` columns, typed ``Mapped[str]``) so they round-trip cleanly on the
+JSON wire; nullable enum columns default to ``NULL``. JSON columns use the
 :class:`~specsmither.db.base.JSONType` codec.
 """
 
@@ -51,8 +50,7 @@ class PlanningSession(Base, IdMixin, TimestampMixin):
     DB by the partial-unique lock index ``ix_one_active_planning_session`` (a
     racing second ``start_planning_session`` hits a UNIQUE violation → ``CONFLICT``;
     architecture §4a). The ``last_validator_output`` JSON blob carries
-    ``validatedPhase`` inside it (there is no top-level ``validated_phase`` field in
-    the source model — recon A6).
+    ``validatedPhase`` inside it (there is no top-level ``validated_phase`` field).
     """
 
     __tablename__ = "planning_sessions"
@@ -80,7 +78,7 @@ class PlanningSession(Base, IdMixin, TimestampMixin):
     last_score: Mapped[float | None] = mapped_column(default=None)
     actions_count: Mapped[int] = mapped_column(default=0)
 
-    # M6.6 resume model: {content, recordedAt, recordedByUserId} | null.
+    # Resume model: {content, recordedAt, recordedByUserId} | null.
     pending_human_feedback: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
 
     last_transition_trigger: Mapped[str | None] = mapped_column(default=None)
@@ -93,7 +91,7 @@ class PlanningSession(Base, IdMixin, TimestampMixin):
     last_validator_output: Mapped[Any] = mapped_column(JSONType, nullable=True)
 
     # Latest-only denormalized guidance snapshots (read for inspect / status
-    # display). Faithful to the source PlanningSession; not history (the history
+    # display). These are the latest values only, not history (the history
     # lives on the action rows + aggregate folds).
     last_process_guidance: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
     last_lifecycle_planning_guidance: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
@@ -108,11 +106,11 @@ class PlanningSessionAction(Base, IdMixin):
 
     ``guidance_variant`` + ``findings_categories`` are the only stream source for
     the aggregate's ``guidanceVariantCounts`` / ``findingsByCategory`` folds, so
-    they are persisted, not derived (recon A6). The catch-all ``payload`` JSON
+    they are persisted, not derived. The catch-all ``payload`` JSON
     absorbs the per-op detail (entityType/entityId/fieldsChanged/denyReason/
     perEntityScoresAfter/humanInstruction/targetActionId/…) that does not warrant a
-    dedicated column. ``operation`` is the op name (the store filter key; TS
-    ``operation``). Append-only: ``created_at`` only (no ``updated_at``).
+    dedicated column. ``operation`` is the op name (the store filter key).
+    Append-only: ``created_at`` only (no ``updated_at``).
     """
 
     __tablename__ = "planning_session_actions"
@@ -135,9 +133,9 @@ class PlanningSessionAction(Base, IdMixin):
 class PlanningPhaseTransition(Base, IdMixin):
     """Append-only phase-change log (``planning_phase_transitions``).
 
-    ``actor`` is a SpecSmither addition (per the task field set) carrying who drove
-    the transition; the source ``triggeredByUserId`` / ``notes`` fields are dropped
-    (single local user). Append-only: ``created_at`` only (maps to ``triggeredAt``).
+    ``actor`` carries who drove the transition; there is no ``triggeredByUserId`` /
+    ``notes`` field (single local user). Append-only: ``created_at`` only (the
+    transition timestamp).
     """
 
     __tablename__ = "planning_phase_transitions"
@@ -185,9 +183,9 @@ class PlanningSessionAggregate(Base):
     PK = ``planning_session_id`` (also the cascading FK). A pure fold of the
     actions/transitions/datapoints, rebuilt in-txn via ``computeAggregateUpdate``;
     fully regenerable, so each rollup is a nullable JSON column. The
-    ``last_processed_*`` cursors give the projector idempotency. The cloud
-    ``projectId`` / ``specificationId`` denormalizations are dropped (reachable via
-    the session). ``updated_at`` maps to the source ``lastUpdatedAt``.
+    ``last_processed_*`` cursors give the projector idempotency. There are no cloud
+    ``projectId`` / ``specificationId`` denormalizations (reachable via the
+    session). ``updated_at`` maps to ``lastUpdatedAt`` on the wire.
     """
 
     __tablename__ = "planning_session_aggregates"

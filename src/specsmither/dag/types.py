@@ -8,8 +8,8 @@ inputs ORM-free keeps the aggregators pure and trivially testable.
 Outputs — ``CascadeTransition``, ``TreeTicket``/``DependencyTree``,
 ``CriticalPathNode`` — live in the module that produces them.
 
-Determinism note: ids are assumed ASCII (ULID/UUID), so Python ``sorted()``
-matches the TS engine's JS UTF-16 ordering byte-for-byte.
+Determinism note: ids are assumed ASCII (ULID/UUID), so Python ``sorted()`` gives
+a stable, well-defined ordering.
 """
 
 from __future__ import annotations
@@ -44,9 +44,8 @@ class EpicNode:
 class DepEdge:
     """A dependency edge: ``ticket_id`` depends on ``depends_on_id``.
 
-    Mirrors the TS ``TicketDependency`` row exactly (``ticketId`` /
-    ``dependsOnId``): the *dependent* end is ``ticket_id``, the *blocker* end is
-    ``depends_on_id``. ``find_dependents(X)`` = edges whose ``depends_on_id == X``.
+    The *dependent* end is ``ticket_id``, the *blocker* end is ``depends_on_id``.
+    ``find_dependents(X)`` = edges whose ``depends_on_id == X``.
     """
 
     ticket_id: str

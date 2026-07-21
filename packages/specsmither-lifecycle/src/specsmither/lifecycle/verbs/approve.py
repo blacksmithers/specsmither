@@ -1,13 +1,13 @@
-"""``approve_handover`` — the human approves a parked planning session (A1 §4.1).
+"""``approve_handover`` — the human approves a parked planning session.
 
-Ported from ``verbs/approve-handover.ts``. A separate (non-dispatch) entrypoint: the
-human, having reviewed the spec parked by ``complete_planning_session``, approves the
-handover. Pure ``(payload, ports) -> HandoverOutcome``.
+A separate (non-dispatch) entrypoint: the human, having reviewed the spec parked by
+``complete_planning_session``, approves the handover. Pure
+``(payload, ports) -> HandoverOutcome``.
 
 The flow:
 
 1. Guard ``session.status == 'awaiting_human_review'`` (else ``HANDOVER_NOT_PENDING``).
-2. **M11.1 gate-on-pass precondition**: ``session.last_gate_result != 'pass'`` →
+2. **Gate-on-pass precondition**: ``session.last_gate_result != 'pass'`` →
    ``HANDOVER_GATE_FAILING``. ``None`` (undefined) is treated as NOT passing — the
    original awaiting entry implies a recorded pass, so an absent value is a gap, not an
    implicit pass. A human/agent edit that broke the gate while still awaiting must
@@ -74,7 +74,7 @@ def approve_handover(payload: ApproveHandoverPayload, ports: LifecyclePorts) -> 
                 f"(status={session.status})."
             ),
         )
-    # M11.1 — approve only on a passing gate; None/undefined is NOT passing.
+    # Approve only on a passing gate; None/undefined is NOT passing.
     if session.last_gate_result != "pass":
         return HandoverError(
             code="HANDOVER_GATE_FAILING",

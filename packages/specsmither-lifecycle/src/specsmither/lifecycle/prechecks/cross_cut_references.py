@@ -1,12 +1,10 @@
 """Pre-check: is an epic cross-referenced by another epic before deletion?
 
-Faithful port of ``planning/pre-checks/cross-cut-references.ts`` (A1 §1.4). Pure.
-
-A ``delete_epic`` is blocked when any **other** epic's serialised JSON contains
-the target epic id — the crude substring referrer scan (cross-cut-references.ts:15):
-``specFull.epics.filter(e => e.id !== epicId).filter(e => JSON.stringify(e).includes(epicId))``.
-This catches an epic whose body (or any of its tickets / extra columns) textually
-references the epic about to be deleted.
+Pure. A ``delete_epic`` is blocked when any **other** epic's serialised JSON
+contains the target epic id — a crude substring referrer scan: for every epic
+other than the target, check whether its JSON serialisation includes the target
+epic id. This catches an epic whose body (or any of its tickets / extra columns)
+textually references the epic about to be deleted.
 """
 
 from __future__ import annotations

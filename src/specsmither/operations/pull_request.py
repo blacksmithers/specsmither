@@ -1,8 +1,6 @@
-"""``link_pull_request`` — work item #18 (the spec ⇄ PR association primitive).
+"""``link_pull_request`` — the spec ⇄ PR association primitive.
 
-A clean Python rewrite of ``packages/operations/src/operations/pull-request.ts``,
-rebound onto the ``specification_prs`` table. The TS handler takes a ``ticketId``
-and resolves it to its specification; here the primitive links directly against the
+Backed by the ``specification_prs`` table. The primitive links directly against the
 SPECIFICATION (the dispatch facade resolves ticket → spec upstream when needed).
 
 Idempotency on ``(specification_id, pr_number)`` is the contract — the

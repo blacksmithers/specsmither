@@ -1,9 +1,6 @@
 """Pre-check: would deleting a blueprint breach the blueprint:epic ratio?
 
-Faithful port of ``planning/pre-checks/blueprint-epic-ratio.ts`` (ME.10.4,
-A1 §1.4). Pure.
-
-The **validator** config (domain ``planning``) owns the ratio. The lifecycle
+Pure. The **validator** config (domain ``planning``) owns the ratio. The lifecycle
 ``delete_blueprint`` hard-deny reads it off
 ``ValidatorConfig.crossValidation.ratios.blueprintToEpic.min`` and blocks the
 delete when ``(blueprintCount - 1) / epicCount < ratio`` (with ``epicCount > 0``).

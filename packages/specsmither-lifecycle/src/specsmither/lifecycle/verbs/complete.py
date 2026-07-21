@@ -1,5 +1,4 @@
-"""``complete_planning_session`` (CPS) — ported from
-``planning/verbs/complete-planning-session.ts`` (A1 §1.5).
+"""``complete_planning_session`` (CPS).
 
 Pure: ``(payload, ports) -> VerbResult``. CPS hands a planned spec to a human:
 

@@ -1,4 +1,4 @@
-"""Pre-check: does the content the write will persist read back cleanly? (MB.1 family)
+"""Pre-check: does the content the write will persist read back cleanly?
 
 The write-boundary safety net. Spec/epic/ticket content is persisted as JSON (or decomposed
 into child tables) and read back through the crucible-backed domain records

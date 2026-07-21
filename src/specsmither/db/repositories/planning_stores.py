@@ -1,19 +1,17 @@
-"""The 5 planning ``*StoreSqlite`` repositories (architecture §4/§13; recon A6).
+"""The 5 planning ``*StoreSqlite`` repositories (architecture §4/§13).
 
-These mirror the SpecForge ``session-types`` planning store interfaces
-(``IPlanningSession*Store``) over SQLite, drop-in via the same DI bag. Every store
-is **session-bound** (subclasses :class:`SessionStore`, holds the caller's
-``Session``) and runs inside the caller's ``Session.begin()`` — it never opens or
-commits a transaction.
+These are the SQLite planning store repositories, wired in through the shared store
+DI bag. Every store is **session-bound** (subclasses :class:`SessionStore`, holds
+the caller's ``Session``) and runs inside the caller's ``Session.begin()`` — it
+never opens or commits a transaction.
 
 Read/write split (architecture §4/§13):
 
 * :class:`PlanningSessionStore`, :class:`PlanningSessionActionStore`,
   :class:`PlanningPhaseTransitionStore` are **READ-ONLY** in SpecSmither. Planning
   mutation (session create/update, action append, phase transition) flows through
-  the 0.1.0 ``WritePlan`` executor, not these stores — exactly as the JSON
-  behavioural template documents (*"planning writes flow through
-  @specforge/lifecycle WritePlan + executor"*). The lifecycle is not built here.
+  the 0.1.0 ``WritePlan`` executor, not these stores: planning writes go through the
+  lifecycle WritePlan + executor. The lifecycle is not built here.
 * :class:`PlanningEntityScoreDatapointStore` and
   :class:`PlanningSessionAggregateStore` additionally carry an **in-transaction
   upsert** — the write path the L4 rollup (:mod:`specsmither.rollups.aggregate`)
@@ -21,13 +19,12 @@ Read/write split (architecture §4/§13):
   upserts are idempotent on a deterministic primary key, so re-running the rollup
   over the same actions updates in place and never duplicates.
 
-Projection economy (architecture §4): the TS ``ForDashboard`` / ``ByProject``
+Projection economy (architecture §4): the ``ForDashboard`` / ``ByProject``
 projection variants collapse to one ``get_*`` + one ``list_*`` (with optional
-filters) each; the cloud ``projectId`` denormalization is dropped (the project is
+filters) each; there is no cloud ``projectId`` denormalization (the project is
 reachable via ``specification_id`` → spec → project). No denormalized **count**
-columns are written here — those are owned by the recompute worklist (#14). The
-planning store interfaces expose no count delta-mutators, so there are none to
-no-op.
+columns are written here — those are owned by the recompute worklist. The planning
+stores expose no count delta-mutators, so there are none to no-op.
 
 Existence seam: a by-own-id ``get`` resolves the authoritative row or raises
 ``NotFoundError`` via :func:`require_found`; the query-shaped lookups
@@ -235,7 +232,7 @@ class PlanningEntityScoreDatapointStore(SessionStore):
 #: The materialized projection columns :meth:`PlanningSessionAggregateStore.upsert_aggregate`
 #: may write. Excludes the identity PK (``planning_session_id``) and ``updated_at``
 #: (auto-stamped via the model's ``onupdate``). Never includes a denormalized entity
-#: count column — those are the recompute worklist's (#14), not this projection's.
+#: count column — those are the recompute worklist's, not this projection's.
 _AGGREGATE_PROJECTION_COLUMNS = frozenset(
     {
         "phase_timeline",
@@ -273,7 +270,7 @@ class PlanningSessionAggregateStore(SessionStore):
         """In-txn upsert on PK ``planning_session_id``, merging projection columns.
 
         Get-or-create on the session id, then overwrite each supplied projection
-        column (``entity_counts`` / ``current_scores`` / the §2.4c telemetry folds /
+        column (``entity_counts`` / ``current_scores`` / the telemetry folds /
         the ``last_processed_*`` cursors). Unsupplied columns keep their value;
         ``updated_at`` is auto-stamped by the model's ``onupdate``. Idempotent: the
         rollup re-running with the same fold rewrites the row in place. Runs inside

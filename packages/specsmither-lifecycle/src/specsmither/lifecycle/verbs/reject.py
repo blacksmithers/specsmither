@@ -1,6 +1,6 @@
-"""``reject_handover`` — the human rejects a parked session, no written feedback (A1 §4.3).
+"""``reject_handover`` — the human rejects a parked session, no written feedback.
 
-Ported from ``verbs/reject-handover.ts``. A separate (non-dispatch) entrypoint. Flips
+A separate (non-dispatch) entrypoint. Flips
 the session back to ``'active'`` with ``last_transition_trigger = 'human_reject_no_feedback'``
 (the phase is unchanged); the agent learns on its next ``get_planning_status`` poll to ask
 the human in chat what needs rework. Pure ``(payload, ports) -> HandoverOutcome``; the

@@ -9,7 +9,7 @@ Protocol. Each row is one ``(scope, owner_id, domain)`` config delta:
 * ``owner_id`` — the ``project_id`` (scope ``'project'``) or ``spec_id`` (scope
   ``'spec'``). It is a *bare* string, NOT a typed foreign key: the column is
   polymorphic over two parent tables, so the existence guarantee lives in the
-  write path, not a DB constraint (mirrors the TS single-table config store).
+  write path, not a DB constraint (one narrow table backs every scope/domain).
 * ``domain`` — the config namespace: ``'planning'`` (the crucible
   ``ValidatorConfig``) or ``'planning-lifecycle'`` (the lifecycle guidance knobs).
 * ``value`` — the overrides/snapshot blob (a sparse ``DeepPartial`` of the domain

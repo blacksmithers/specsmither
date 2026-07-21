@@ -1,5 +1,4 @@
-"""``action_planning_session`` (APS) — the engine spine (A1 §1.4), ported from
-``planning/verbs/action-planning-session.ts``.
+"""``action_planning_session`` (APS) — the engine spine.
 
 Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 
@@ -13,7 +12,7 @@ Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 2. on accept — project the mutation in memory, compute the *effective* phase (a late
    op rewinds to its native phase), re-validate the projected spec, evaluate the
    phase gate, build the audit action (+ a rollback transition for a late op), apply
-   the M11.1 actor-conditional post-status, and assemble the success WritePlan.
+   the actor-conditional post-status, and assemble the success WritePlan.
 
 ``payload`` is ``{sessionId, operation, payload?, actor?, userId?}``.
 """
@@ -153,7 +152,7 @@ def action_planning_session(
     if isinstance(schema_result, Denied):
         return _denied(ports, session, operation, op_payload, schema_result, user_id, lifecycle_config, validator_config)
 
-    # MB.1.2 / ME.14.2 — payload-only shape + enum-poison guards (off-enum apiContract type,
+    # payload-only shape + enum-poison guards (off-enum apiContract type,
     # content-less structure, off-enum nfr/guardrail/techStack/goal/requirement values) run
     # before the spec_full load, alongside schema_validate. Without these an off-enum value
     # crashes the typed write boundary as an opaque INTERNAL error the agent can't recover from.
@@ -176,7 +175,7 @@ def action_planning_session(
     for check in (
         count_bounds(operation, op_payload or {}, spec_full, validator_config),
         cross_cut_references(operation, op_payload or {}, spec_full),
-        # #11a / MB.2 — FK-existence guards: deny a write referencing an unknown epic /
+        # FK-existence guards: deny a write referencing an unknown epic /
         # ticket / blueprint id (raw IntegrityError or phantom-success) with the valid roster.
         entity_refs_exist(operation, op_payload or {}, spec_full),
         blueprint_link_refs_exist(operation, op_payload or {}, spec_full),
@@ -329,7 +328,7 @@ def _accept(
     prev_session_status = cast(
         Literal["active", "awaiting_human_review"], session.status
     )
-    # M11.1 — a HUMAN edit on an awaiting session stays awaiting; otherwise active.
+    # A HUMAN edit on an awaiting session stays awaiting; otherwise active.
     post_session_status = (
         PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value
         if actor == ActorType.HUMAN

@@ -1,6 +1,6 @@
-"""The lifecycle dispatch facade (work item #10) — ported from ``index.ts`` (A1 §0).
+"""The lifecycle dispatch facade.
 
-:func:`create_lifecycle` mirrors the TS ``createLifecycle(ports)``: it returns a
+:func:`create_lifecycle` returns a
 :class:`Lifecycle` whose :meth:`Lifecycle.handle` does exactly two things — route the
 event to its (pure) verb, then, if the verb built a :class:`WritePlan` and a
 ``persist_write_plan`` port is wired, persist it. Both happen inside the caller's
@@ -9,7 +9,7 @@ one ``BEGIN IMMEDIATE``).
 
 The four agent-facing verbs (``start`` / ``action`` / ``complete`` / ``inspect``) are
 the dispatch union; the three handover verbs are deliberately NOT here (they are
-webapp/CLI-called entrypoints built separately, mirroring the TS design where
+webapp/CLI-called entrypoints built separately, where
 ``approveHandover`` / ``rejectHandover*`` are not part of ``handle``).
 
 This module is PURE (no sqlalchemy): it dispatches to the verbs and persists via the
@@ -48,7 +48,7 @@ VerbName = Literal["start", "action", "complete", "inspect"]
 
 @dataclass(frozen=True)
 class LifecycleEvent:
-    """A dispatchable lifecycle event: ``{verb, payload}`` (the TS ``PlanningLifecycleEvent``).
+    """A dispatchable lifecycle event: ``{verb, payload}``.
 
     ``verb`` selects the agent-facing verb; ``payload`` is that verb's wire payload
     (``{specId,…}`` for ``start``; ``{sessionId, operation, payload?, actor?,…}`` for
@@ -60,7 +60,7 @@ class LifecycleEvent:
 
 
 class Lifecycle:
-    """The dispatch object ``create_lifecycle`` returns (the TS ``Lifecycle``).
+    """The dispatch object ``create_lifecycle`` returns.
 
     Holds the bound :class:`LifecyclePorts`; :meth:`handle` routes + persists.
     """

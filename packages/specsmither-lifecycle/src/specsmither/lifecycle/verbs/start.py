@@ -1,5 +1,4 @@
-"""``start_planning_session`` (SPS) — ported from
-``planning/verbs/start-planning-session.ts`` (A1 §1.3).
+"""``start_planning_session`` (SPS).
 
 Pure: ``(payload, ports) -> VerbResult``. SPS reads the spec, checks the status
 precondition, resolves both configs, then branches on the active session:
@@ -8,7 +7,7 @@ precondition, resolves both configs, then branches on the active session:
   ``auto_initial``), flipping a ``draft`` spec to ``planning`` in the same plan.
 * **active → resume** — idempotent re-entry. Per locked decision 3 the gate cache is
   **never** trusted: SPS resume ALWAYS re-validates (in-process, cheap) and persists
-  the fresh output, rather than the TS phase-keyed cache read.
+  the fresh output, rather than reading a phase-keyed cache.
 * **awaiting_human_review → deny** — SPS is not for an awaiting session; it denies
   (``sps_not_for_awaiting``) and points the agent at ``get_planning_status``.
 

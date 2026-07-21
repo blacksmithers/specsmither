@@ -1,7 +1,6 @@
-"""``reopen_specification`` — work item #18 (the lone finalize→planning transition).
+"""``reopen_specification`` — the lone finalize→planning transition.
 
-A clean Python rewrite of ``packages/operations/src/operations/reopen.ts``,
-rebound onto :class:`~specsmither.db.repositories.core_stores.SpecStoreSqlite` and
+Backed by :class:`~specsmither.db.repositories.core_stores.SpecStoreSqlite` and
 wrapped in the M0 mutation contract (its own ``Session.begin()`` + recompute).
 
 Reopens a finalized specification back into planning. Precondition: the spec must
