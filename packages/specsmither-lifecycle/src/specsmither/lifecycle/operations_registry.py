@@ -174,6 +174,10 @@ class OperationDef:
     max_batch: int | None = None
     #: Pre-condition guards that must pass before the operation is accepted.
     guards: tuple[GuardSpec, ...] = ()
+    #: A CONTIGUOUS band of phases in which the op is native (no rollback), beyond the
+    #: single ``native_phase``. When set, ``native_phase`` is the earliest member (the
+    #: rollback anchor). Empty = the op is native only in its single ``native_phase``.
+    native_phases: tuple[PlanningPhase, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -355,23 +359,36 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
             ),
         ),
     ),
-    # 11. link_blueprint_to_tickets — native: cross_validation; forbidden in all phases before it.
+    # 11. link_blueprint_to_tickets — native across ticket_decomposition → cross_validation
+    #     (the verb is the sole blueprint-link writer; cross_validation settles coverage).
+    #     Forbidden in every phase before ticket_decomposition; native_phase is the earliest
+    #     band member (the rollback anchor).
     "link_blueprint_to_tickets": OperationDef(
         name="link_blueprint_to_tickets",
         kind="mutating",
-        native_phase=PlanningPhase.CROSS_VALIDATION,
-        forbidden_phases=(*_phases_before(PlanningPhase.CROSS_VALIDATION), PlanningPhase.PLANNED),
+        native_phase=PlanningPhase.TICKET_DECOMPOSITION,
+        native_phases=(
+            PlanningPhase.TICKET_DECOMPOSITION,
+            PlanningPhase.TICKET_EXPANSION,
+            PlanningPhase.CROSS_VALIDATION,
+        ),
+        forbidden_phases=(*_phases_before(PlanningPhase.TICKET_DECOMPOSITION), PlanningPhase.PLANNED),
         multi_actor=False,
-        description="Link a blueprint to one or more tickets during cross_validation.",
+        description="Link a blueprint to one or more tickets from ticket_decomposition onward.",
     ),
-    # 12. unlink_blueprint_to_tickets — native: cross_validation; forbidden in all phases before it.
+    # 12. unlink_blueprint_to_tickets — native across ticket_decomposition → cross_validation.
     "unlink_blueprint_to_tickets": OperationDef(
         name="unlink_blueprint_to_tickets",
         kind="mutating",
-        native_phase=PlanningPhase.CROSS_VALIDATION,
-        forbidden_phases=(*_phases_before(PlanningPhase.CROSS_VALIDATION), PlanningPhase.PLANNED),
+        native_phase=PlanningPhase.TICKET_DECOMPOSITION,
+        native_phases=(
+            PlanningPhase.TICKET_DECOMPOSITION,
+            PlanningPhase.TICKET_EXPANSION,
+            PlanningPhase.CROSS_VALIDATION,
+        ),
+        forbidden_phases=(*_phases_before(PlanningPhase.TICKET_DECOMPOSITION), PlanningPhase.PLANNED),
         multi_actor=False,
-        description="Unlink a blueprint from one or more tickets during cross_validation.",
+        description="Unlink a blueprint from one or more tickets from ticket_decomposition onward.",
     ),
     # 13. create_dependencies — native: cross_validation; forbidden in all phases before it;
     #     max_batch = 5000 (not 100).
@@ -488,6 +505,10 @@ def classify_operation_call(
 
     if current_phase in spec.forbidden_phases:
         return "forbidden"
+    # An op native across a CONTIGUOUS band (native_phases) is native in every member —
+    # no rollback (e.g. blueprint-link across ticket_decomposition → cross_validation).
+    if current_phase in spec.native_phases:
+        return "native"
     if spec.native_phase == "any" or spec.native_phase == current_phase:
         return "native"
     # Not forbidden and not the native phase: it must be a late call.

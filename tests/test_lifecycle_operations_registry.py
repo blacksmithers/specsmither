@@ -172,3 +172,12 @@ def test_get_planning_status_is_the_only_multi_actor_op() -> None:
         if spec is not None and spec.multi_actor
     ]
     assert multi == ["get_planning_status"]
+
+
+def test_native_phases_band_blueprint_link_from_ticket_decomposition() -> None:
+    # MB.9 — blueprint-link/unlink are native across ticket_decomposition → cross_validation
+    # (never late/rollback there), and forbidden in every phase before ticket_decomposition.
+    for op in ("link_blueprint_to_tickets", "unlink_blueprint_to_tickets"):
+        assert classify_operation_call(op, P.EPIC_EXPANSION) == "forbidden"
+        for phase in (P.TICKET_DECOMPOSITION, P.TICKET_EXPANSION, P.CROSS_VALIDATION):
+            assert classify_operation_call(op, phase) == "native"
