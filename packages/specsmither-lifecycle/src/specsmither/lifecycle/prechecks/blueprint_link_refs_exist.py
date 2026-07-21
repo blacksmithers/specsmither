@@ -1,9 +1,8 @@
-"""Pre-check: do a blueprint-link's referenced ids exist? (MB.2)
+"""Pre-check: do a blueprint-link's referenced ids exist?
 
-A faithful port of the ``blueprint-link-refs-exist`` guard added in ``e5839c89``. Pure.
-
-``link_blueprint_to_tickets`` / ``unlink_blueprint_to_tickets`` write ``ticket_blueprint_refs``
-join rows (once the MB.2 relational write path emits them). This fails closed BEFORE the write
+Pure. ``link_blueprint_to_tickets`` / ``unlink_blueprint_to_tickets`` write
+``ticket_blueprint_refs`` join rows (once the relational write path emits them). This
+fails closed BEFORE the write
 when the ``blueprintId`` or any ``ticketId`` does not exist, so a dangling id never reaches the
 SQLite FK as an ``IntegrityError`` — it becomes a clean soft-deny with the valid rosters.
 """
@@ -37,7 +36,7 @@ def blueprint_link_refs_exist(
     blueprint_id = payload.get("blueprintId")
     if isinstance(blueprint_id, str) and blueprint_id not in blueprint_ids:
         return Denied(
-            code="dangling_reference",
+            code="broken_reference",
             message=(
                 f"Blueprint '{blueprint_id}' does not exist in this specification. "
                 "Link against one of the listed blueprint ids."
@@ -57,7 +56,7 @@ def blueprint_link_refs_exist(
     ]
     if missing:
         return Denied(
-            code="dangling_reference",
+            code="broken_reference",
             message=(
                 f"{len(missing)} ticket id(s) in this link do not exist: "
                 f"{', '.join(missing)}. Link only existing tickets."

@@ -1,8 +1,8 @@
 """``ConfigStoreSqlite`` — the SQLite backing of the lifecycle config seam.
 
-Implements :class:`specsmither.lifecycle.ports.ConfigStore` (the TS ``IConfigStore``,
-``config-store-interface.ts``) over the single polymorphic ``config`` table
-(:class:`~specsmither.db.models.PlanningConfig`). Two scopes share the table:
+Implements :class:`specsmither.lifecycle.ports.ConfigStore` over the single
+polymorphic ``config`` table (:class:`~specsmither.db.models.PlanningConfig`). Two
+scopes share the table:
 
 * **project overrides** (``scope='project'``, ``owner_id=project_id``) — the live,
   editable config delta a project carries.

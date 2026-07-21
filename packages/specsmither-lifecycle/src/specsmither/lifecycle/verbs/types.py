@@ -1,18 +1,16 @@
 """Handover verb contracts — the three payloads + the ``HandoverOutcome`` envelope.
 
-A faithful-but-adapted port of the TS ``lifecycle/types.ts`` handover surface (A1
-§4). The three handover verbs (``approve`` / ``reject`` / ``reject_with_feedback``)
-are **separate entrypoints** — they are NOT part of the agent ``dispatch.handle``
-union (A1 §0); the webapp/CLI/MCP calls them directly and persists the returned
-``write_plan``.
+The handover surface. The three handover verbs (``approve`` / ``reject`` /
+``reject_with_feedback``) are **separate entrypoints** — they are NOT part of the
+agent ``dispatch.handle`` union; the CLI/MCP calls them directly and persists the
+returned ``write_plan``.
 
 Each verb is a pure ``(payload, ports) -> HandoverOutcome``:
 
 * :class:`HandoverResult` (``ok=True``) carries the post-mutation ``new_status`` /
-  ``new_phase``, the composed agent :class:`PlanningAgentResponse` (the SpecSmither
-  addition — the TS handover envelope carried no agent prose since it was purely
-  webapp-facing; locally the human runs these via the CLI/MCP and wants guidance),
-  and the :class:`WritePlan` the entrypoint commits.
+  ``new_phase``, the composed agent :class:`PlanningAgentResponse` (the human runs
+  these via the CLI/MCP and wants guidance prose alongside the outcome), and the
+  :class:`WritePlan` the entrypoint commits.
 * :class:`HandoverError` (``ok=False``) is the typed pre-condition failure envelope
   (``SESSION_NOT_FOUND`` / ``HANDOVER_NOT_PENDING`` / ``INVALID_FEEDBACK`` /
   ``HANDOVER_GATE_FAILING``). It carries no write plan — nothing is persisted.
@@ -40,8 +38,8 @@ __all__ = [
     "RejectHandoverWithFeedbackPayload",
 ]
 
-#: The closed set of handover pre-condition failure codes (``HandoverErrorCode``,
-#: types.ts:30-36). ``HANDOVER_GATE_FAILING`` is the M11.1 gate-on-pass precondition.
+#: The closed set of handover pre-condition failure codes (``HandoverErrorCode``).
+#: ``HANDOVER_GATE_FAILING`` is the gate-on-pass approval precondition.
 HandoverErrorCode = Literal[
     "SESSION_NOT_FOUND",
     "HANDOVER_NOT_PENDING",
@@ -85,12 +83,12 @@ class RejectHandoverWithFeedbackPayload:
 
 @dataclass(frozen=True)
 class HandoverResult:
-    """A successful handover (``HandoverResult``, types.ts:18-25).
+    """A successful handover (``HandoverResult``).
 
     ``new_status`` / ``new_phase`` are the POST-mutation session state (``'closed'`` at
     the terminal approve, ``'active'`` otherwise). ``response`` is the composed
-    agent-facing guidance (SpecSmither addition); ``write_plan`` is the atomic mutation
-    the entrypoint commits in one transaction.
+    agent-facing guidance; ``write_plan`` is the atomic mutation the entrypoint commits
+    in one transaction.
     """
 
     session_id: str
@@ -103,7 +101,7 @@ class HandoverResult:
 
 @dataclass(frozen=True)
 class HandoverError:
-    """A typed handover pre-condition failure (``HandoverError``, types.ts:43-47).
+    """A typed handover pre-condition failure (``HandoverError``).
 
     Carries a stable machine ``code`` + a rendered English ``message`` and **no** write
     plan — the failing verb persists nothing.

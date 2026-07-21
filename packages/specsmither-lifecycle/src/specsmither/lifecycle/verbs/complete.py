@@ -1,5 +1,4 @@
-"""``complete_planning_session`` (CPS) — ported from
-``planning/verbs/complete-planning-session.ts`` (A1 §1.5).
+"""``complete_planning_session`` (CPS).
 
 Pure: ``(payload, ports) -> VerbResult``. CPS hands a planned spec to a human:
 
@@ -29,6 +28,7 @@ from specsmither.domain.enums import (
 from specsmither.lifecycle.audit import build_action, build_transition
 from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.guidance.compose import compose_response
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.prechecks import Denied, gate_currently_passing, spec_status_check
 from specsmither.lifecycle.verbs.support import (
     SessionNotFoundError,
@@ -67,7 +67,8 @@ def complete_planning_session(
     light_spec = ports.spec_store.get_spec(session.specification_id)
     project_id = light_spec.project_id if light_spec is not None else ""
     lifecycle_config = resolve_lifecycle_config(
-        ports.config_store, project_id, session.specification_id
+        ports.config_store, project_id, session.specification_id,
+        default_language=ports.default_language,
     )
     validator_config = resolve_validator_config(
         ports.config_store, project_id, session.specification_id
@@ -99,7 +100,13 @@ def complete_planning_session(
 
     # 3. the gate gate — ALWAYS re-validates (no TTL).
     spec_full = ports.spec_store.get_spec_full(session.specification_id)
-    gate_check = gate_currently_passing(session, spec_full, ports.validator, validator_config)
+    gate_check = gate_currently_passing(
+        session,
+        spec_full,
+        ports.validator,
+        validator_config,
+        language=resolve_language(lifecycle_config),
+    )
     if isinstance(gate_check, Denied):
         return _denied(ports, session, gate_check, user_id, lifecycle_config, validator_config)
 
@@ -137,6 +144,9 @@ def _success(
         ),
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        # CPS only reaches success once gate_currently_passing accepted — report it as passing,
+        # not the pre-mutation cache (which could still read 'fail').
+        gate_outcome="pass",
     )
 
     transition = build_transition(
@@ -185,12 +195,16 @@ def _denied(
 ) -> VerbResult:
     _, _, clock = resolve_now(ports)
 
+    # Report the gate verdict the denial implies, not the pre-mutation cache: a gate denial
+    # is a failing gate ('fail'); a session/spec-precondition denial ran no gate (None).
+    gate_outcome = "fail" if denial.code == "gate_not_passed" else None
     response = compose_response(
         variant=GuidanceVariant.DENIED,
         session=session,
         denial=denial,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        gate_outcome=gate_outcome,
     )
 
     action = build_action(

@@ -1,8 +1,7 @@
-"""Read-only report primitives (work item #21).
+"""Read-only report primitives.
 
-Clean Python rewrite of the SpecForge ``operations/{reports,status,sessions-dashboard}.ts``
-read surface, rebuilt over the SQLite stores. This is the *primitive* layer: the
-individual report builders. The MCP ``get``/``list`` composers and the
+The report read surface, built over the SQLite stores. This is the *primitive*
+layer: the individual report builders. The MCP ``get``/``list`` composers and the
 ``getReport`` dispatch facade are a 0.1.0 concern and are deliberately out of
 scope — these functions are the building blocks that facade will route to.
 
@@ -27,17 +26,17 @@ Report kinds that survive in SpecSmither:
 * :func:`implementation_summary` — progress breakdown with the 7-day
   :func:`velocity_per_day` and the ±10% :func:`velocity_trend` band.
 * :func:`time_report` — estimation-only sums (``actualMinutes`` is frozen-zone and
-  absent, so efficiency/variance collapse out — recon A3).
+  absent, so efficiency/variance collapse out).
 * :func:`blockers_report` — the blocked tickets + their immediate blocking
   dependencies (blocker depth), with injected-clock block durations.
 * :func:`estimate_drift` — flags epics whose stored estimate diverges from the
-  live ticket-sum by more than the TS ``>20`` percent threshold.
+  live ticket-sum by more than the ``>20`` percent threshold.
 * :func:`readiness_report` — **degrades gracefully**: SpecSmither is NO-LLM, so the
   AI readiness score fields do not exist; they surface as ``None`` and the
   score-driven attention items are simply empty. The non-AI categories (file
   conflicts, dependency health, estimate drift) are computed for real.
 * :func:`active_sessions` — active **planning** sessions only (work/review are
-  frozen-zone, always empty — sessions-dashboard.ts v0.1.0 cut).
+  frozen-zone, always empty in v0.1.0).
 
 Dropped (AI / frozen-zone): :func:`work_report` and
 :func:`implementation_analysis_report` raise :class:`NotImplementedError` — there
@@ -126,7 +125,7 @@ __all__ = [
 #: functions accept this and never read the wall clock directly.
 Clock = Callable[[], datetime] | datetime
 
-#: The velocity / trend window (the TS uses a fixed 7-day rolling window).
+#: The velocity / trend window (a fixed 7-day rolling window).
 _WINDOW = timedelta(days=7)
 
 
@@ -144,9 +143,8 @@ def _resolve_now(now: Clock) -> datetime:
 def _parse_iso(value: str | None) -> datetime | None:
     """Parse an ISO-8601 timestamp to an aware UTC datetime (or ``None`` if unparseable).
 
-    Mirrors the TS ``new Date(x)`` tolerance: a missing/garbage timestamp yields
-    ``None`` and is treated as "not in the window" by callers (the TS ``NaN``
-    comparison is always false).
+    Tolerates bad input: a missing/garbage timestamp yields ``None`` and is treated
+    as "not in the window" by callers.
     """
     if not value:
         return None
@@ -169,7 +167,7 @@ def _round2(value: float) -> float:
 
 
 def _format_duration(minutes: int) -> str:
-    """``formatDuration`` — minutes → ``"5h"`` / ``"2d 3h"`` (status.ts)."""
+    """Format minutes → ``"5h"`` / ``"2d 3h"``."""
     hours = minutes // 60
     if hours < 24:
         return f"{hours}h"
@@ -177,7 +175,7 @@ def _format_duration(minutes: int) -> str:
 
 
 def _calculate_duration(since: str | None, moment: datetime) -> str:
-    """``calculateDuration`` — elapsed ``moment - since`` → ``"5h"`` / ``"2d 3h"``."""
+    """Elapsed ``moment - since`` → ``"5h"`` / ``"2d 3h"``."""
     start = _parse_iso(since) or moment
     hours = math.floor((moment - start).total_seconds() / 3600)
     days = hours // 24
@@ -193,7 +191,7 @@ def _duration_minutes(since: str | None, moment: datetime) -> int:
 
 
 def _est(value: int | None) -> int:
-    """Estimated minutes with the TS ``?? 0`` coalesce."""
+    """Estimated minutes, coalescing ``None`` to ``0``."""
     return value if value is not None else 0
 
 
@@ -211,7 +209,7 @@ def _count_done_in_window(
     """Count ``done`` tickets whose ``updated_at`` falls in ``(after, before]``.
 
     SpecSmither has no ``completed_at`` column, so ``updated_at`` is the completion
-    proxy (the TS used ``completedAt ?? updatedAt``).
+    proxy.
     """
     count = 0
     for ticket in tickets:
@@ -339,7 +337,7 @@ class EpicProgress:
 
 @dataclass(frozen=True, slots=True)
 class PriorityDistribution:
-    """Hardcoded priority buckets (no priority field in the planning era — recon A3)."""
+    """Hardcoded priority buckets (no priority field in the planning era)."""
 
     high: int
     medium: int
@@ -350,9 +348,8 @@ class PriorityDistribution:
 class ComplexityDistribution:
     """Complexity buckets over SpecSmither's ``Complexity`` vocabulary.
 
-    The TS ``xs/s/m/l/xl`` buckets are replaced by crucible's four-value
-    ``small/medium/large/xlarge``; ``medium`` also catches a missing complexity
-    (mirrors the TS ``m`` bucket catching ``!complexity``).
+    Crucible's four-value ``small/medium/large/xlarge`` vocabulary; ``medium`` also
+    catches a missing complexity.
     """
 
     small: int
@@ -498,7 +495,7 @@ class TimeScope:
 
 @dataclass(frozen=True, slots=True)
 class TimeSummary:
-    """Estimation-only summary (actuals are frozen-zone — recon A3)."""
+    """Estimation-only summary (actuals are frozen-zone)."""
 
     total_estimated_minutes: int
 
@@ -1074,7 +1071,7 @@ def implementation_summary(
 
 
 def _safe_project_ref(stores: AllStores, project_id: str) -> ProjectRef:
-    """Resolve a project ref, tolerating a missing project (the TS spec path does)."""
+    """Resolve a project ref, tolerating a missing project."""
     try:
         project = stores.projects.get_project(project_id)
     except NotFoundError:
@@ -1319,7 +1316,7 @@ def estimate_drift(
 
     ``mismatchPercent = round(|epicMinutes - ticketSum| / epicMinutes * 100, 2)``;
     only epics with a positive stored estimate are considered, and only divergences
-    strictly greater than ``20`` are returned (the TS threshold). ``now`` is accepted
+    strictly greater than ``20`` are returned. ``now`` is accepted
     for interface uniformity; the computation is time-independent.
     """
     del now  # threshold comparison — no clock dependency.

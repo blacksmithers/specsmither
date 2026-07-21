@@ -1,20 +1,19 @@
-"""The three wire CONTENT shapes the dispatch facade returns (work item #14).
+"""The three wire CONTENT shapes the dispatch facade returns.
 
-A faithful port of ``api-types/mcp/{lifecycle-envelope,standard-envelope}.ts`` plus
-``core/handlers/_stub-response.ts`` — the JSON-able *content* the facade hands back and
-the MCP server TOON-encodes. Deliberately **no JSON-RPC / HTTP transport code map**: a
-domain error here is *content* (a ``standard_error`` envelope), never a protocol error,
-so the TS ``CODE_TRANSPORT`` table (HTTP status + JSON-RPC code) is dropped entirely.
+The JSON-able *content* the facade hands back and the MCP server TOON-encodes.
+Deliberately **no JSON-RPC / HTTP transport code map**: a domain error here is
+*content* (a ``standard_error`` envelope), never a protocol error, so there is no
+transport code table (HTTP status + JSON-RPC code) — error codes stay content-level.
 
-A client dispatches on ``kind`` first (recon A7 §3.1). There are exactly three results:
+A client dispatches on ``kind`` first. There are exactly three results:
 
 #. **lifecycle** — :class:`LifecycleEnvelope` ``{kind: 'lifecycle', agent_response}``. Used
    on BOTH the success AND the denial branch of a planning verb: a denial
    *self-discriminates* because the embedded :class:`PlanningAgentResponse` carries
    ``outcome == 'denied'`` — there is no separate denial code, no separate envelope. The
    response is embedded *verbatim, field-preserving* (no allow/deny-list, no remap); the
-   only addition is the derived ``gate_passed`` boolean (the TS ``gatePassed`` scalar,
-   reconstituted from the Python ``gate_result`` literal).
+   only addition is the derived ``gate_passed`` boolean, reconstituted from the
+   ``gate_result`` literal so clients need not re-derive it.
 #. **success** — the RAW impl payload with NO envelope wrapper. :func:`success_payload` is
    essentially identity: it just normalises the value to a plain JSON-able structure
    (enums → ``.value``, dataclasses / pydantic records → dicts, datetimes → ISO strings).
@@ -70,7 +69,7 @@ __all__ = [
 # --------------------------------------------------------------------------------------
 # Response verbosity tier (declared in the tool schema; forwarded into the lifecycle
 # payload, where the PlanningAgentResponse builder is the one that actually honours it —
-# the dispatch facade only passes it through, recon A8 §4.5).
+# the dispatch facade only passes it through).
 # --------------------------------------------------------------------------------------
 
 #: The three response-verbosity tiers (~80 / ~200 / ~500 tokens); ``standard`` default.
@@ -86,9 +85,9 @@ DEFAULT_RESPONSE_DETAIL: ResponseDetail = "standard"
 def normalise_response_detail(value: object) -> ResponseDetail:
     """Coerce an arbitrary wire value to a :data:`ResponseDetail` (default ``standard``).
 
-    Unknown / missing values fall back to :data:`DEFAULT_RESPONSE_DETAIL`, mirroring the
-    TS schema default — the facade calls this on the raw ``responseDetail`` arg before
-    forwarding it into the lifecycle payload.
+    Unknown / missing values fall back to :data:`DEFAULT_RESPONSE_DETAIL` (the tool-schema
+    default) — the facade calls this on the raw ``responseDetail`` arg before forwarding it
+    into the lifecycle payload.
     """
     if value == "minimal":
         return "minimal"
@@ -155,8 +154,8 @@ def _agent_response_to_dict(response: PlanningAgentResponse) -> dict[str, object
     """Embed a :class:`PlanningAgentResponse` verbatim as a JSON-able dict.
 
     Field-preserving by construction — every dataclass field is emitted, with the derived
-    ``gate_passed`` boolean (the TS ``gatePassed`` scalar) added so clients can read the
-    typed gate verdict directly without re-deriving it from ``gate_result``.
+    ``gate_passed`` boolean added so clients can read the typed gate verdict directly
+    without re-deriving it from ``gate_result``.
     """
     data: dict[str, object] = {
         f.name: to_jsonable(getattr(response, f.name)) for f in fields(response)
@@ -209,9 +208,8 @@ def success_payload(data: object) -> object:
 # 3. Standard error envelope — only thrown errors are enveloped; success is bare.
 # --------------------------------------------------------------------------------------
 
-#: The seven MCP error codes a public tool can surface (recon A7 §3.2). The transport
-#: code map (HTTP status / JSON-RPC code) is intentionally NOT ported — these are content
-#: errors, never protocol errors.
+#: The seven MCP error codes a public tool can surface. There is deliberately no transport
+#: code map (HTTP status / JSON-RPC code) — these are content errors, never protocol errors.
 ErrorGuidanceCode = Literal[
     "NOT_FOUND",
     "VALIDATION_FAILED",

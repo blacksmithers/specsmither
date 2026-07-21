@@ -1,9 +1,6 @@
 """Pre-check: would a create/delete breach the entity-count bounds?
 
-Faithful port of ``planning/pre-checks/count-bounds.ts`` (ME.10.3, A1 §1.4).
-Pure.
-
-The **validator** config (domain ``planning``) is the single owner of the
+Pure. The **validator** config (domain ``planning``) is the single owner of the
 entity-count bounds. This lifecycle hard-deny reads the ``.default`` leaf of each
 ``ThresholdEntry`` off the resolved
 ``ValidatorConfig.structuralRequirements.{arrayMinCounts,arrayMaxCounts}``:
@@ -16,7 +13,7 @@ entity-count bounds. This lifecycle hard-deny reads the ``.default`` leaf of eac
 (``structuralRequirements.arrayCountPhases`` is phase-*scoping*, NOT count
 values — never read here.)
 
-**Boundary parity** with the validator advisory (which checks the POST count,
+**Boundary alignment** with the validator advisory (which checks the POST count,
 ``epicsCount > max``): this pre-check checks the PRE-create count
 (``len(epics) >= max``). Both trip at the same real count — keep the ``>=`` / ``<=``.
 A missing bound (``None``) disables that side of the check.
@@ -40,7 +37,7 @@ def _count_default(
     """Read ``structuralRequirements.<counts_key>.<parent>.<child>.default`` safely.
 
     Returns ``None`` (disables the bound) when any level is absent or the leaf is
-    not a number — mirroring the TS optional-chaining (``specification?.epics?.default``).
+    not a number — a safe walk down ``specification`` → ``epics`` → ``default``.
     """
 
     structural = config.get("structuralRequirements")

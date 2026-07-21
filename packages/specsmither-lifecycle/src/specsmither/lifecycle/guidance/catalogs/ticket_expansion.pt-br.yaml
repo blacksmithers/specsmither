@@ -1,0 +1,73 @@
+# Overlay pt-BR para a fase ticket_expansion — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos.
+
+phaseHumanName: "Expansão de Tickets"
+phaseGoal: "Preencher o corpo dos tickets — descrição, critérios de aceitação BDD, passos de implementação ordenados, operações de arquivo, especificação de testes, guardrails, referências e snippets de código/tipo, e referências de blueprint."
+phaseCharacter: "a fase mais densa. o validador pontua por ticket; o gate é por ticket tocado. complexityDrivenMinCounts (M4.14) exige um mínimo de conteúdo de corpo por faixa de complexidade."
+
+fields:
+  - field: ticket.description
+    description: "Descrição completa do ticket — contexto, intenção, casos de borda. Expandida a partir do cabeçalho da Fase 4. O validador exige >=50 caracteres."
+
+  - field: ticket.acceptanceCriteria
+    description: "Critérios de aceitação BDD. O `id` é atribuído automaticamente internamente — nunca o passe. O `order` é opcional: preenchido automaticamente pela posição se omitido, ou defina-o para controlar a ordenação. A contagem mínima varia por complexidade (M4.14, T-V.8): small=2, medium=3, large=5, xlarge=7."
+    interview_hooks:
+      - "Qual é o smoke test para este ticket?"
+      - "Quais casos de borda?"
+
+  - field: ticket.implementationSteps
+    description: "Passos ordenados para a execução do work lifecycle. O corpo do passo é `text` (renomeado de `description` em T-S.6). O `id` é atribuído automaticamente internamente — nunca o passe. O `order` é opcional: preenchido automaticamente pela posição se omitido. O `completed` é alternado durante o trabalho, não no planejamento. Contagem mínima por complexidade: 2/4/6/10 para s/m/l/xl."
+
+  - field: ticket.filesToBeCreated
+    description: "Novos arquivos que este ticket cria. Crítico — a análise de waves e a cobertura de blueprints dependem de declarações de arquivo precisas."
+
+  - field: ticket.filesToBeModified
+    description: "Arquivos existentes que este ticket modifica. Crítico — sinaliza pontos de coordenação com outros tickets que editam os mesmos arquivos."
+
+  - field: ticket.filesToBeDeleted
+    description: "Arquivos que este ticket exclui. Participa da análise de waves para detectar conflitos de exclusão-após-modificação e exclusão-após-criação."
+    na_when: "o ticket não exclui nada — forneça uma justificativa com >=20 caracteres"
+
+  - field: ticket.filesToBeReferenced
+    description: "Dependências somente leitura — arquivos que este ticket lê ou importa mas não altera. Arquivos referenciados de propriedade de outro ticket exigem uma declaração de `dependencies` para impor a ordenação."
+    na_when: "o ticket não referencia arquivos de outros tickets — forneça uma justificativa com >=20 caracteres"
+
+  - field: ticket.testSpecification.testTypes
+    description: "Tipos de teste que este ticket de verification cobre. Condicionalmente aplicável: pontuado apenas quando ticketType === 'verification'."
+    interview_hooks:
+      - "Qual(is) camada(s) de teste esta verification exercita?"
+    na_when: "ticketType !== 'verification' — a entrada é ignorada automaticamente"
+
+  - field: ticket.testSpecification.qualityGates
+    description: "Condições que devem valer para que a verification seja considerada completa (por exemplo, 'sem retries instáveis', 'mutation score >= 60%'). Condicionalmente aplicável: apenas tickets de verification."
+    interview_hooks:
+      - "Quais sinais nos fariam rejeitar esta verification como insuficiente?"
+    na_when: "ticketType !== 'verification' — a entrada é ignorada automaticamente"
+
+  - field: ticket.testSpecification.testCommands
+    description: "Comandos concretos que executam esta verification (por exemplo, 'pnpm --filter @specforge/auth test'). Fecha a lacuna entre intenção e CI. Condicionalmente aplicável: apenas tickets de verification."
+    na_when: "a verification não tem superfície de comando (apenas revisão manual) — forneça uma justificativa com >=20 caracteres"
+
+  - field: ticket.testSpecification.coverageTarget
+    description: "Sinal de planejamento suave para a meta de cobertura de linhas/branches. O validador impõe o intervalo [0, 100] via a verificação de qualidade `range` do T-V.13. Condicionalmente aplicável: apenas tickets de verification."
+    interview_hooks:
+      - "Qual é um piso de cobertura realista para esta verification?"
+    na_when: "cobertura não é significativa para esta verification — forneça uma justificativa com >=20 caracteres"
+
+  - field: ticket.guardrails
+    description: "Guardrails da spec que se aplicam a este ticket. Subconjunto por ticket de spec.guardrails."
+
+  - field: ticket.codeReferences
+    description: "Referências a arquivos EXISTENTES na base de código que o agente deve ler para obter contexto."
+
+  - field: ticket.typeReferences
+    description: "Referências a definições de tipo EXISTENTES a serem usadas."
+
+  - field: ticket.codeSnippets
+    description: "Padrões de código INLINE — distintos de codeReferences (que apontam para arquivos existentes). M4.14. Contagem mínima por complexidade: 1/2/3/4 para s/m/l/xl."
+
+  - field: ticket.typeSnippets
+    description: "Definições de tipo INLINE a introduzir. M4.14. Contagem mínima por complexidade: 1/1/2/2 para s/m/l/xl."
+
+  - field: ticket.blueprintReferences
+    description: "Links iniciais de blueprint — refinados na Fase 6 (cross_validation)."

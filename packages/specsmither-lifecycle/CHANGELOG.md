@@ -4,6 +4,77 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+Adds a guidance internationalization layer and two structured recovery plans for the
+cross-validation denials, and tracks the `crucible-forge` 0.4.0 engine.
+
+### Added
+
+- **`specsmither.lifecycle.i18n`** — a keyed English catalog (`TEXT_EN`) that a
+  `data/<lang>.json` overlay translates per key (per-key English fallback), sharing
+  crucible's language-tag semantics and `{placeholder}` substitution. `resolve_language`
+  reads the normalized `guidance.language` from the resolved lifecycle config and falls
+  back to `en` for an absent/unsupported value. Every composer body and the per-field
+  instruction scaffolding resolve through it; the field catalogs gain per-language
+  `catalogs/<phase>.<lang>.yaml` prose overlays. Ships a complete Brazilian-Portuguese
+  translation. An embed selects the language per project/spec via the `config_store`
+  (`guidance.language`) or as an ambient default via `LifecyclePorts.default_language`;
+  the resolved tag is forwarded to `crucible-forge` so its findings match.
+- **`cycle_guidance.format_cycle_analysis` / `build_cycle_detected_denial`** — the
+  per-edge evidence + 2-D recovery packet (cycle shape × the spurious edge's
+  intra-batch/persisted origin) that enriches the `cycle_detected` deny.
+- **`creator_plan_guidance.format_creator_plan`** — the consolidated creator-election
+  plan prepended to a cross-validation file-provenance `gate_not_passed` deny.
+
+### Changed
+
+- **Requires `crucible-forge >= 0.4.0`.** `Validator.validate` gains a `language`
+  argument, threaded from the resolved guidance language through APS / CPS / SPS so the
+  engine emits findings in the same language as the composer.
+- **N/A declarations point at the `justify` op.** The rendered per-field N/A
+  instruction (and the cross-validation N/A prose) now name the first-class `justify`
+  operation and the bare N/A scope, replacing the retired `update_*`-with-
+  `fieldDeclarations` path.
+- **`planning-lifecycle` config schema version 3** — adds `guidance.language`.
+
+### Fixed
+
+- **`human_feedback_received` status poll** now carries a recommended move (the phase's
+  first native op, "apply the human's feedback") instead of an empty list.
+
+### Removed
+
+- **`inspect_planning_session`** — an unreachable verb no surface dispatched. The
+  read-only status report is the `get_planning_status` operation of
+  `action_planning_session`, which is fully retained.
+
+## 0.2.0
+
+Tracks the `crucible-forge` 0.3.0 validation engine and adds a catalog-parity
+contract so any tool surface can be tested against the deny-gate it must conform to.
+
+### Added
+
+- **`PLANNING_OPERATION_CONTRACT`** — a plain-data view of the per-operation
+  deny-gate (`op → required payload fields`, plus the required fields of a payload's
+  array-of-objects field). Derived directly from the payload models, so it cannot
+  drift from what the gate enforces.
+- **`check_planning_catalog_parity()`** + **`catalog_branches_from_oneof()`** — a
+  reusable guard that asserts a public tool catalog's `action_planning_session`
+  `oneOf` advertises exactly the shapes the gate accepts. A catalog that offers, say,
+  `epicId` where the gate requires `id`, or `{ticketId, dependsOnId}` where it
+  requires `{fromTicketId, toTicketId}`, is flagged before it can deny a
+  spec-following agent at runtime.
+
+### Changed
+
+- **Requires `crucible-forge >= 0.3.0`.** The cross-validation guidance now reflects
+  the engine's current registry: ten checks run in the `cross_validation` phase,
+  file coordination is covered by `file-provenance` and `concurrent-modification`,
+  and blueprint coverage is gated earlier (in `ticket_decomposition`). The
+  `create_dependencies` batch cap is stated as 5000 edges per call.
+
 ## 0.1.0
 
 First release — the pure planning-lifecycle core, extracted from the `specsmither`

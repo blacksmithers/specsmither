@@ -1,6 +1,6 @@
 """Config resolution — the pure merge layer over the :class:`ConfigStore` seam.
 
-Faithful port of ``lifecycle/config.ts`` (work item #6, A1 §6). Two config domains
+Two config domains
 feed the lifecycle; both resolve the same way — baseline defaults, then the project
 override, then (if a spec is in play) the frozen spec snapshot — but they merge with
 different machinery:
@@ -10,17 +10,16 @@ different machinery:
   (which deep-merges *and re-validates* the result). :func:`resolve_validator_config`
   layers ``crucible.load_defaults()`` ← project overrides ← spec snapshot.
 
-* **``planning-lifecycle``** — the lifecycle guidance knobs. After the ME.10.5 trim
+* **``planning-lifecycle``** — the lifecycle guidance knobs. After the config trim
   (and dropping ``observatoryBaseUrl`` — observatory links are cosmetic prose — and
   ``gateResultCacheTtlMs`` — the CPS stale-cache TTL is baked locally), this is just
   :data:`PLANNING_LIFECYCLE_DEFAULTS`: ``guidance.{maxNextEntitiesToShow,
   fieldRenderDetail}``. :func:`resolve_lifecycle_config` layers it via the pure
   :func:`deep_merge` (no schema, no validation — the shape is tiny and fixed).
 
-Both resolvers read from a :class:`specsmither.lifecycle.ports.ConfigStore`. The async
-``PlanningLifecycleConfigResolver`` / ``PlanningConfigResolver`` classes collapse to
-these two sync functions — SpecSmither has no async I/O and assembles the effective
-config straight from the store (A1 §5, ports.py ``LifecyclePorts.config_store``).
+Both resolvers read from a :class:`specsmither.lifecycle.ports.ConfigStore`. They are
+plain sync functions — SpecSmither has no async I/O and assembles the effective
+config straight from the store (``ports.py`` ``LifecyclePorts.config_store``).
 """
 
 from __future__ import annotations
@@ -29,6 +28,7 @@ import copy
 from typing import TYPE_CHECKING, Any
 
 import crucible
+from crucible.i18n import normalize_language
 
 if TYPE_CHECKING:
     from specsmither.lifecycle.ports import ConfigStore
@@ -45,26 +45,31 @@ __all__ = [
 
 #: The crucible ``ValidatorConfig`` namespace (mirrors ``crucible.PLANNING_CONFIG_DOMAIN``).
 PLANNING_DOMAIN = "planning"
-#: The lifecycle-guidance namespace (TS ``PLANNING_LIFECYCLE_CONFIG_DOMAIN``).
+#: The lifecycle-guidance namespace.
 PLANNING_LIFECYCLE_DOMAIN = "planning-lifecycle"
-#: The schema version stamped on a ``planning-lifecycle`` write (TS bumped 1→2 at the
-#: ME.10.5 clean-break trim). Surfaced for the spec-create snapshot freeze (L4).
-PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION = 2
+#: The schema version stamped on a ``planning-lifecycle`` write (1→2 at the
+#: guidance-config trim; 2→3 adding ``guidance.language``). Surfaced for the
+#: spec-create snapshot freeze (L4).
+PLANNING_LIFECYCLE_CONFIG_SCHEMA_VERSION = 3
 
 #: Baseline ``planning-lifecycle`` config — merged under project/spec overrides.
-#: Trimmed to the two surviving guidance knobs (see module docstring).
+#: Trimmed to the surviving guidance knobs (see module docstring).
 PLANNING_LIFECYCLE_DEFAULTS: dict[str, Any] = {
     "guidance": {
         # Max entities shown in the expansion-phase "next to fill" block. Caps size.
         "maxNextEntitiesToShow": 3,
         # Phase-entry field-block fidelity: 'rich' (full per-field render) | 'concise'.
         "fieldRenderDetail": "rich",
+        # Guidance language for the composer's prose AND the crucible findings seam.
+        # 'en' (default) | 'pt-br' (aliases 'pt'/'pt_BR'); normalized on read. An
+        # unsupported tag falls back to 'en' rather than failing the lifecycle.
+        "language": "en",
     },
 }
 
 
 def deep_merge(base: dict[str, Any], override: Any) -> dict[str, Any]:
-    """Recursively merge *override* onto *base* (the PURE resolver merge, config.ts:32-53).
+    """Recursively merge *override* onto *base* (the PURE resolver merge).
 
     Rules (identical for both config domains):
 
@@ -99,7 +104,7 @@ def resolve_validator_config(
 
     Layers ``crucible.load_defaults()`` ← the project's overrides ← (if *spec_id* is
     given) the spec's frozen snapshot, via :func:`crucible.merge_config` (deep-merge +
-    re-validate). With no stored overrides this returns the crucible defaults verbatim.
+    re-validate). With no stored overrides this returns the crucible defaults unchanged.
     """
     overrides: list[dict[str, Any]] = []
     project_overrides = config_store.get_project_overrides(project_id, PLANNING_DOMAIN)
@@ -113,7 +118,10 @@ def resolve_validator_config(
 
 
 def resolve_lifecycle_config(
-    config_store: ConfigStore, project_id: str, spec_id: str | None = None
+    config_store: ConfigStore,
+    project_id: str,
+    spec_id: str | None = None,
+    default_language: str = "en",
 ) -> dict[str, Any]:
     """Resolve the effective ``PlanningLifecycleConfig`` (domain ``planning-lifecycle``).
 
@@ -121,9 +129,16 @@ def resolve_lifecycle_config(
     *spec_id* is given) the spec's frozen snapshot, via the pure :func:`deep_merge`.
     With no stored overrides this returns the defaults. The defaults are deep-copied
     up front so the module-level constant is never aliased into the result.
+
+    ``default_language`` seeds the baseline ``guidance.language`` (normalized; an
+    unsupported tag degrades to ``"en"``) — the ambient default a caller supplies (the
+    embed's ``LifecyclePorts.default_language`` / the product's ``SPECSMITHER_LANGUAGE``).
+    A per-project or per-spec ``guidance.language`` override still wins over it.
     """
+    base = copy.deepcopy(PLANNING_LIFECYCLE_DEFAULTS)
+    base["guidance"]["language"] = normalize_language(default_language) or "en"
     result = deep_merge(
-        copy.deepcopy(PLANNING_LIFECYCLE_DEFAULTS),
+        base,
         config_store.get_project_overrides(project_id, PLANNING_LIFECYCLE_DOMAIN),
     )
     if spec_id is not None:

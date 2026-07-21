@@ -1,7 +1,4 @@
-"""WritePlan builders + decompose-on-write (work item #8) — ported from
-``planning/atomic-write/*`` (A1 §2.3) and the ``buildOpWriteItems`` /
-``buildCreatePersist`` decompose in ``verbs/action-planning-session.ts`` (A1 §1.4
-step 11).
+"""WritePlan builders + decompose-on-write for the planning lifecycle.
 
 These are the **pure** builders an L4 verb calls to turn a decision into the flat
 :class:`~specsmither.adapters.write_plan_executor.WritePlan` the M0 executor commits
@@ -10,29 +7,29 @@ in one transaction. Each builder takes the already-built audit row dicts (from
 :func:`~specsmither.lifecycle.audit.build_transition`) and wraps them in the
 matching :class:`~specsmither.adapters.write_plan_executor.WritePlanItem` variants.
 
-What is DROPPED versus the TS originals (all DynamoDB transport artifacts):
+Two transport concerns that a remote key-value store would need have no analog here:
 
-* the ``transactions[][]`` chunker — the executor applies the FLAT ``items`` list in
-  one ``BEGIN IMMEDIATE`` (no 100-item ``transactWrite`` cap), so there is no
+* no ``transactions[][]`` chunker — the executor applies the FLAT ``items`` list in
+  one ``BEGIN IMMEDIATE`` (no 100-item batch-write cap), so there is no
   ``splitIntoTransactions``.
-* the ``changes: ModelChange[]`` AppSync-subscription mirror — no subscribers locally.
+* no ``changes: ModelChange[]`` subscription mirror — no subscribers locally.
 
-The **CRITICAL SpecSmither divergence** (matches the M0 schema): there is no
-per-entity score *column* on a spec/epic/ticket row, so the TS entity-score *fusion*
-(writing a ``{spec|epic|ticket}Score`` field onto the mutation row) is dropped. The
+A key SpecSmither schema decision (matches the M0 schema): there is no
+per-entity score *column* on a spec/epic/ticket row, so no entity-score *fusion*
+(writing a ``{spec|epic|ticket}Score`` field onto the mutation row) happens. The
 gate's :class:`~specsmither.lifecycle.gate.EntityScoreWrite` rows become
 :class:`~specsmither.adapters.write_plan_executor.ScoreDatapointAppend` items ONLY
 (the ``planning_entity_score_datapoints`` time-series, id
 ``f"{trigger_action_id}#{entity_id}#{trigger}"``). ``EntityScoreUpdate`` is a no-op
 in M0 and is not emitted.
 
-The other deliberate fix (A1 §3.3 cache-divergence): the APS success write persists
-``last_validator_output`` + ``last_score`` + ``last_gate_result`` +
+The other deliberate design point (avoiding cache divergence): the APS success write
+persists ``last_validator_output`` + ``last_score`` + ``last_gate_result`` +
 ``last_validated_at`` on the ``SessionUpdate`` so the session is the single source of
-truth (the TS persisted only ``lastGateResult`` + ``lastValidatedAt``).
+truth.
 
-The decompose-on-write (``buildOpWriteItems`` / ``buildCreatePersist``) is ported
-into :func:`build_create_persist` / :func:`build_op_write_items` /
+The decompose-on-write is implemented by :func:`build_create_persist` /
+:func:`build_op_write_items` /
 :func:`extract_mutation_target`, combined by :func:`resolve_aps_mutation` into the
 :class:`ApsMutation` that :func:`build_aps_success_write_plan` consumes. CREATE ops
 mint an id + the full create columns into a ``SpecMutation``; ``update_ticket``
@@ -44,7 +41,7 @@ deterministic child ids and strips them off the flat ``SpecMutation``; deletes �
 ``ticket_dependencies`` rows (deterministic edge id ``f"{from}--requires--{to}"``).
 
 The op payload keys are the agent/MCP **camelCase** wire shape (``epicId`` /
-``fromTicketId`` / ``dependencyIds`` / ``acceptanceCriteria`` / …), matching the TS;
+``fromTicketId`` / ``dependencyIds`` / ``acceptanceCriteria`` / …);
 the *emitted* child-row keys are snake_case ORM columns (the executor would normalise
 either way, but we prefer snake_case).
 """
@@ -252,7 +249,7 @@ class ApsRollback:
 # --------------------------------------------------------------------------- #
 
 
-#: MB.1.1 — spec/epic array-of-object content fields whose crucible sub-models require a
+#: The spec/epic array-of-object content fields whose crucible sub-models require a
 #: schema-internal ``id`` (and, for acceptance criteria, a positional ``order``). An agent
 #: may author these items WITHOUT the id/order (the wire schema does not force them); the
 #: read boundary (crucible sub-models) then silently drops the whole array to ``None`` — so
@@ -293,7 +290,7 @@ def _fill_item_ids(
 def ensure_item_ids(
     fields: Mapping[str, Any], *, id_generator: IdGenerator | None = None
 ) -> dict[str, Any]:
-    """MB.1.1 write-boundary filler: mint schema-required id/order into spec/epic arrays.
+    """Write-boundary filler: mint schema-required id/order into spec/epic arrays.
 
     Returns a shallow copy of ``fields`` with an ``id`` minted into every id-bearing
     array-of-object content field (and an ``order`` into acceptance criteria), including
@@ -304,7 +301,7 @@ def ensure_item_ids(
     for name in _ID_ONLY_ARRAY_FIELDS:
         if isinstance(out.get(name), list):
             out[name] = _fill_item_ids(out[name], id_generator, order=False)
-    # MB.1.2 — normalise apiContracts[].type case at the write boundary (REST -> rest) so a
+    # Normalise apiContracts[].type case at the write boundary (REST -> rest) so a
     # correctly-cased-but-uppercase value round-trips through the crucible enum on read; a
     # value still off-enum after folding is soft-denied upstream (field_shape_soft_deny).
     contracts = out.get("apiContracts")
@@ -646,19 +643,21 @@ def build_op_write_items(op: str, payload: Mapping[str, Any] | None) -> OpWriteI
         )
 
     if op in ("link_blueprint_to_tickets", "unlink_blueprint_to_tickets"):
-        # MB.2 — a real relational write: one ticket_blueprint_refs join row per target
+        # A real relational write: one ticket_blueprint_refs join row per target
         # ticket, deterministic id f"{ticket_id}-br-{blueprint_id}" (idempotent link /
         # keyed unlink), instead of the old no-op single-entity mutation. Without this the
         # cross_validation blueprint-coverage check never accumulates and the loop stalls.
         blueprint_id = p.get("blueprintId")
         ticket_ids = p.get("ticketIds") or []
-        if not isinstance(blueprint_id, str):
+        if not isinstance(blueprint_id, str) or not blueprint_id:
             return OpWriteItems()
         linking = op == "link_blueprint_to_tickets"
         link_items: list[WritePlanItem] = []
+        seen_tids: set[str] = set()
         for tid in ticket_ids:
-            if not isinstance(tid, str):
-                continue
+            if not isinstance(tid, str) or tid in seen_tids:
+                continue  # dedup: one join row per (ticket, blueprint) pair
+            seen_tids.add(tid)
             ref_id = f"{tid}-br-{blueprint_id}"
             if linking:
                 link_items.append(
@@ -686,9 +685,9 @@ def build_op_write_items(op: str, payload: Mapping[str, Any] | None) -> OpWriteI
 def extract_mutation_target(
     op: str, payload: Mapping[str, Any] | None, specification_id: str
 ) -> tuple[EntityType, str]:
-    """Resolve the (entity_type, entity_id) a non-create op mutates (``extractMutationTarget``)."""
+    """Resolve the (entity_type, entity_id) a non-create op mutates."""
     p = payload or {}
-    # MB.2 — link/unlink are RELATIONAL ops that mutate no single entity's fields; their
+    # link/unlink are RELATIONAL ops that mutate no single entity's fields; their
     # target must resolve to the always-existing spec BEFORE the substring fall-throughs
     # below (``'ticket' in 'link_blueprint_to_TICKETS'`` would otherwise build a phantom
     # Ticket keyed by the blueprintId → a NOT-NULL IntegrityError on every valid link id).
@@ -721,7 +720,7 @@ def resolve_aps_mutation(
     id_generator: IdGenerator | None = None,
     clock: Any | None = None,
 ) -> ApsMutation:
-    """Combine create-persist + op-write-items into the :class:`ApsMutation` (A1 §1.4 step 11/12).
+    """Combine create-persist + op-write-items into the :class:`ApsMutation`.
 
     CREATE ops mint a real id + the full create columns; other ops resolve the target
     via :func:`extract_mutation_target` and carry the payload's ``fields``. A decomposed
@@ -745,7 +744,7 @@ def resolve_aps_mutation(
         if op_items.fields_override is not None
         else mutation_fields
     )
-    # MB.1.1 — mint schema-required id/order into spec/epic content arrays before the
+    # Mint schema-required id/order into spec/epic content arrays before the
     # write (tickets are handled by _decompose_update_ticket, which already stamps ids).
     if entity_type in ("spec", "epic"):
         effective_fields = ensure_item_ids(effective_fields, id_generator=id_generator)
@@ -897,8 +896,8 @@ def build_aps_success_write_plan(
     ``EntityScoreUpdate``).
 
     The ``SessionUpdate`` persists ``last_validator_output`` + ``last_score`` +
-    ``last_gate_result`` + ``last_validated_at`` (the A1 §3.3 cache-divergence fix — the
-    session is the single source of truth). M11.1 actor-conditional status: an awaiting
+    ``last_gate_result`` + ``last_validated_at`` (the cache-divergence fix — the
+    session is the single source of truth). Actor-conditional status: an awaiting
     session flips to ``active`` UNLESS the editor is ``human`` (a human edit re-scores in
     place and stays ``awaiting_human_review``). A late op rolls ``current_phase`` back to
     the rollback's effective (native) phase.

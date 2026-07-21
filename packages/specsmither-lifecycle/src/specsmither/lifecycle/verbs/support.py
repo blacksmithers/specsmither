@@ -1,12 +1,11 @@
 """Shared verb support — :class:`VerbResult`, the verb errors, and pure helpers.
 
-The four planning verbs (``start`` / ``action`` / ``complete`` / ``inspect``) all
-return a :class:`VerbResult` (the TS ``LifecycleResult<PlanningAgentResponse>``: a
-composed response + the optional :class:`WritePlan` to persist). The three error
-classes are the *throw* path the TS verbs use when there is no session to scope a
-guidance denial to (a missing spec / session, or an SPS precondition failure); the L5
-dispatch facade maps each to an error envelope. The remaining helpers are the small,
-pure utilities every verb shares:
+The three planning verbs (``start`` / ``action`` / ``complete``) all
+return a :class:`VerbResult` (a composed response + the optional :class:`WritePlan` to
+persist). The three error classes are the *throw* path the verbs use when there is no
+session to scope a guidance denial to (a missing spec / session, or an SPS precondition
+failure); the L5 dispatch facade maps each to an error envelope. The remaining helpers
+are the small, pure utilities every verb shares:
 
 * :func:`resolve_now` — freeze ``ports.clock`` once per verb call (so every audit
   timestamp in one verb agrees), returning the instant, its ISO string, and a pinned
@@ -64,7 +63,6 @@ __all__ = [
 class VerbResult:
     """A verb's output: the composed response + the optional plan to persist.
 
-    Mirrors the TS ``LifecycleResult<PlanningAgentResponse> = { response, writePlan? }``.
     ``write_plan`` is ``None`` only for the read-only ``inspect`` verb; every other
     verb (including a denial) carries at least an audit-only plan.
     """
@@ -98,7 +96,7 @@ class SpecNotInPlanningError(Exception):
     """SPS precondition failure — the spec is neither ``draft`` nor ``planning``.
 
     Thrown (not returned as a guidance denial) because the SPS create path has no
-    session to scope a denial to (``SpecNotInPlanningError``, M7.9).
+    session to scope a denial to (``SpecNotInPlanningError``).
     """
 
     def __init__(self, actual_status: str) -> None:
@@ -132,7 +130,7 @@ def resolve_now(ports: LifecyclePorts) -> tuple[datetime, str, Clock]:
     """Freeze ``ports.clock`` once → ``(now, now_iso, pinned_clock)``.
 
     Pins the instant so every audit row / write-plan timestamp minted in one verb
-    call agrees (the TS reads ``ports.clock()`` once at the top, then threads ``now``).
+    call agrees: read ``ports.clock()`` once at the top, then thread ``now``.
     """
     now = ports.clock() if ports.clock is not None else datetime.now(tz=UTC)
     return now, now.isoformat(), (lambda: now)
@@ -160,12 +158,13 @@ def touched_entity_ids(
 ) -> list[str]:
     """The flat touched-id list the phase gate consumes (``extractTouchedEntityIds``).
 
-    Derived per *effective* phase to match the gate's flat contract: the spec id in
-    ``planning_spec`` / ``cross_validation``; the edited entity id (``payload.id``) in
-    the two ``*_expansion`` phases; ``[]`` for the binary ``*_decomposition`` phases
-    (which ignore it).
+    Keyed to the mutating op's target (which the effective phase pins down): the spec id
+    in ``planning_spec`` (where the only mutating op is ``update_spec``); the edited entity
+    id (``payload.id``) in the two ``*_expansion`` phases; ``[]`` everywhere else — the
+    binary ``*_decomposition`` phases and ``cross_validation``, whose native ops
+    (dependencies / blueprint links) touch no scored entity, so they emit no spec datapoint.
     """
-    if effective_phase in (PlanningPhase.PLANNING_SPEC, PlanningPhase.CROSS_VALIDATION):
+    if effective_phase == PlanningPhase.PLANNING_SPEC:
         return [spec_id]
     if effective_phase in (PlanningPhase.EPIC_EXPANSION, PlanningPhase.TICKET_EXPANSION):
         raw_id = (payload or {}).get("id")

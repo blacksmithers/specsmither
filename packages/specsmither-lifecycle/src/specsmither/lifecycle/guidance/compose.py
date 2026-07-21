@@ -1,8 +1,7 @@
 """The single English guidance composer — :func:`compose_response` + get_planning_status.
 
-A **minimal** port of the TS composer family (``planning/lifecycle-planning-guidance/
-compose.ts`` + ``planning/process-guidance/compose-*.ts``). Rather than reproduce the
-~40 template-interpolated TS files (and their generated catalog), 0.1.0 ships one terse,
+A **minimal** guidance composer. Rather than a large family of
+template-interpolated files (and a generated catalog), 0.1.0 ships one terse,
 correct, English composer keyed off :class:`~specsmither.domain.enums.GuidanceVariant`.
 The structured side-blocks (next-entities, recommended-moves, findings) are derived from
 the same inputs the verbs already hold (the gate result + the validator output), so the
@@ -43,6 +42,7 @@ from specsmither.lifecycle.guidance.types import (
     PlanningAgentResponse,
     RecommendedMove,
 )
+from specsmither.lifecycle.i18n import DEFAULT_LANGUAGE, resolve_language, t
 from specsmither.lifecycle.operations_registry import OPERATIONS
 from specsmither.lifecycle.state_machine import is_terminal_phase, next_phase
 
@@ -65,14 +65,14 @@ __all__ = [
 #: ``PLANNING_LIFECYCLE_DEFAULTS['guidance']['maxNextEntitiesToShow']``).
 _DEFAULT_MAX_NEXT_ENTITIES = 3
 
-#: Hard cap on finding-derived recommended moves (TS ``RECOMMENDED_MOVES_CAP``).
+#: Hard cap on finding-derived recommended moves (``RECOMMENDED_MOVES_CAP``).
 _RECOMMENDED_MOVES_CAP = 3
 
-#: Hard cap on the summarized findings list (TS ``MAX_FINDINGS_PER_CATEGORY``, flattened).
+#: Hard cap on the summarized findings list (``MAX_FINDINGS_PER_CATEGORY``, flattened).
 _MAX_FINDINGS = 20
 
-#: Human-readable phase names + 1-based indices (the generated TS ``PHASES`` catalog,
-#: trimmed to the two fields the prose reads). ``planned`` is the sentinel (index 0).
+#: Human-readable phase names + 1-based indices (the ``PHASES`` catalog, trimmed to
+#: the two fields the prose reads). ``planned`` is the sentinel (index 0).
 _PHASE_META: dict[PlanningPhase, tuple[str, int]] = {
     PlanningPhase.PLANNING_SPEC: ("Spec Definition", 1),
     PlanningPhase.EPIC_DECOMPOSITION: ("Epic Decomposition", 2),
@@ -85,15 +85,16 @@ _PHASE_META: dict[PlanningPhase, tuple[str, int]] = {
 
 
 # --------------------------------------------------------------------------- #
-# Small display helpers (the TS resume-helpers.ts surface, trimmed)           #
+# Small display helpers (the resume-helpers surface, trimmed)                 #
 # --------------------------------------------------------------------------- #
 
 
-def _phase_human_name(phase: PlanningPhase) -> str:
+def _phase_human_name(phase: PlanningPhase, language: str = DEFAULT_LANGUAGE) -> str:
     """Human-readable phase name; falls back to the underscored key spelled out."""
 
-    meta = _PHASE_META.get(phase)
-    return meta[0] if meta else phase.value.replace("_", " ")
+    if phase in _PHASE_META:
+        return t(language, f"phase.name.{phase.value}")
+    return phase.value.replace("_", " ")
 
 
 def _phase_index(phase: PlanningPhase) -> int:
@@ -113,12 +114,12 @@ def _native_ops_for_phase(phase: PlanningPhase) -> list[str]:
     ]
 
 
-def _native_ops_inline(phase: PlanningPhase) -> str:
+def _native_ops_inline(phase: PlanningPhase, language: str = DEFAULT_LANGUAGE) -> str:
     """Backtick-joined native ops for inline prose, e.g. ``\\`create_epic\\`, ...``."""
 
     ops = _native_ops_for_phase(phase)
     if not ops:
-        return "(none)"
+        return t(language, "label.none")
     return ", ".join(f"`{op}`" for op in ops)
 
 
@@ -153,19 +154,19 @@ def _threshold_for_phase(
     return 0
 
 
-def _fmt_score(score: float | None) -> str:
+def _fmt_score(score: float | None, language: str = DEFAULT_LANGUAGE) -> str:
     """Compact score label (``not yet scored`` when unknown)."""
 
     if score is None:
-        return "not yet scored"
+        return t(language, "label.notScored")
     return f"{score:g}"
 
 
-def _fmt_threshold(threshold: float | None) -> str:
+def _fmt_threshold(threshold: float | None, language: str = DEFAULT_LANGUAGE) -> str:
     """Compact threshold label (``n/a`` when the validator config is absent)."""
 
     if threshold is None:
-        return "n/a"
+        return t(language, "label.thresholdNa")
     return f"{threshold:g}"
 
 
@@ -174,12 +175,14 @@ def _fmt_threshold(threshold: float | None) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _summarize_findings(findings: list[ValidatorFinding]) -> tuple[list[FindingSummary], str | None]:
+def _summarize_findings(
+    findings: list[ValidatorFinding], language: str = DEFAULT_LANGUAGE
+) -> tuple[list[FindingSummary], str | None]:
     """Flatten validator findings into capped :class:`FindingSummary` rows + a summary.
 
-    Mirrors ``composeFindingsBlock``: the summary line counts findings across distinct
-    categories; the list is capped at :data:`_MAX_FINDINGS` (deferring the rich
-    per-category grouping of the TS composer to a later milestone).
+    The summary line counts findings across distinct categories; the list is capped at
+    :data:`_MAX_FINDINGS` (the rich per-category grouping is deferred to a later
+    milestone).
     """
 
     if not findings:
@@ -195,7 +198,11 @@ def _summarize_findings(findings: list[ValidatorFinding]) -> tuple[list[FindingS
         )
         for f in findings[:_MAX_FINDINGS]
     ]
-    summary = f"{len(findings)} finding(s) across {len(categories)} category/categories."
+    summary = t(
+        language,
+        "findings.summary",
+        {"count": len(findings), "categories": len(categories)},
+    )
     return summarized, summary
 
 
@@ -267,17 +274,19 @@ def _next_entities(
 # --------------------------------------------------------------------------- #
 
 
-def _append_field_instructions(body: str, phase: PlanningPhase) -> str:
+def _append_field_instructions(
+    body: str, phase: PlanningPhase, language: str = DEFAULT_LANGUAGE
+) -> str:
     """Append the rich per-field guidance block for ``phase`` to a terse variant body.
 
-    Ports SpecForge's M8.6.1 behaviour — the phase's field catalog (shape, required/optional,
+    The phase's field catalog (shape, required/optional,
     minimum count, N/A mechanism, tier, examples) is delivered *through the prose* so the
     actor fills without guessing. 0.1.x renders the full phase catalog (no spec snapshot →
     no state detection); :func:`compose_field_instructions` supports snapshot-filtered
     rendering for a later milestone. Phases with no catalog (``planned``) add nothing.
     """
 
-    block = compose_field_instructions(phase.value)
+    block = compose_field_instructions(phase.value, language=language)
     if not block:
         return body
     return f"{body}\n\n{block}"
@@ -296,113 +305,106 @@ def _compose_body(
     feedback_content: str | None,
     actions_count: int,
     next_phase_label: str,
+    language: str = DEFAULT_LANGUAGE,
 ) -> str:
-    """Render the terse English body for ``variant`` (the single-composer dispatch)."""
+    """Render the body for ``variant`` in ``language`` (the single-composer dispatch)."""
 
     idx = _phase_index(phase)
-    human = _phase_human_name(phase)
-    native = _native_ops_inline(phase)
-    score_label = _fmt_score(score)
-    threshold_label = _fmt_threshold(threshold)
-    header = f"Phase {idx} of 6 — {human}"
+    human = _phase_human_name(phase, language)
+    native = _native_ops_inline(phase, language)
+    score_label = _fmt_score(score, language)
+    threshold_label = _fmt_threshold(threshold, language)
+    common = {"idx": idx, "human": human, "native": native, "score": score_label}
 
     if variant == GuidanceVariant.GATE_PASSED:
-        body = (
-            f"{header}: the gate is passing (score {score_label}, threshold {threshold_label}). "
-            f"Keep refining via {native}, or call `complete_planning_session` to hand the "
-            "specification to a human reviewer."
-        )
+        body = t(language, "body.gatePassed", {**common, "threshold": threshold_label})
         if next_count:
-            body += f" {next_count} entity/entities are listed for an optional final pass."
+            body += t(language, "body.gatePassed.nextSuffix", {"nextCount": next_count})
         # NB: the rich field catalog is NOT appended on a PASS — repeating the full ~11KB
         # per-field guidance after every successful edit induces churn (the agent re-edits an
         # already-passing entity). It rides GATE_FAILED (where the agent needs it) instead.
         return body
 
     if variant == GuidanceVariant.GATE_FAILED:
-        body = (
-            f"{header}: the gate is failing (score {score_label}, threshold {threshold_label}). "
-            f"Address the {finding_count} outstanding finding(s) via {native}, then re-run the "
-            "operation. See the recommended moves for the exact verb per finding."
+        body = t(
+            language,
+            "body.gateFailed",
+            {**common, "threshold": threshold_label, "findingCount": finding_count},
         )
-        return _append_field_instructions(body, phase)
+        return _append_field_instructions(body, phase, language)
 
     if variant == GuidanceVariant.DENIED:
-        message = denial.message if denial is not None else "The operation was denied."
-        body = f"Denied: {message}"
+        message = (
+            denial.message
+            if denial is not None
+            else t(language, "body.denied.fallbackMessage")
+        )
+        body = t(language, "body.denied", {"message": message})
         if denial is not None and denial.blockers:
             joined = "; ".join(denial.blockers)
-            body += f" Blocking reasons: {joined}."
+            body += t(language, "body.denied.blockers", {"blockers": joined})
         return body
 
     if variant in (GuidanceVariant.PHASE_ADVANCE, GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE):
-        return (
-            f"Advanced to phase {idx} of 6 — {human}. Work this phase via {native}; "
-            "re-validate as you go and watch the gate before completing."
-        )
+        # Entering a phase: render the per-field catalog (fields to fill + threshold + native
+        # ops), mirroring composePhaseIntro — the agent needs it before its first op, not only
+        # after a gate failure.
+        body = t(language, "body.phaseAdvance", common)
+        return _append_field_instructions(body, phase, language)
 
     if variant == GuidanceVariant.PHASE_ROLLBACK:
-        return (
-            f"Rolled back to phase {idx} of 6 — {human} to apply a structural change native "
-            f"to that phase. Re-establish a passing gate via {native} before advancing again."
-        )
+        return t(language, "body.phaseRollback", common)
 
     if variant in (GuidanceVariant.HUMAN_HANDOVER, GuidanceVariant.PHASE_COMPLETE):
-        return (
-            "The specification is ready for human review. Share it with a reviewer and poll "
-            "`get_planning_status` for their approve / reject decision."
-        )
+        return t(language, "body.humanHandover")
 
     if variant == GuidanceVariant.AWAITING_HUMAN_REVIEW_HANDOVER:
-        return (
-            "Awaiting human review. The specification is parked for a reviewer — do not keep "
-            f"editing unless asked. Poll `get_planning_status` for their decision. On approval: "
-            f"{next_phase_label}."
-        )
+        return t(language, "body.awaitingHumanReview", {"nextPhaseLabel": next_phase_label})
 
     if variant in (GuidanceVariant.HUMAN_FEEDBACK, GuidanceVariant.HUMAN_FEEDBACK_RECEIVED):
-        quoted = f' "{feedback_content}"' if feedback_content else ""
-        return (
-            f"Human feedback received:{quoted} Incorporate it via {native} in {human}, then "
-            "re-validate and call `complete_planning_session` again."
+        quoted = (
+            t(language, "body.humanFeedback.quoted", {"content": feedback_content})
+            if feedback_content
+            else ""
         )
+        return t(language, "body.humanFeedback", {**common, "quoted": quoted})
 
     if variant == GuidanceVariant.HUMAN_REJECTED_NO_FEEDBACK:
-        return (
-            "The human rejected the handover without written feedback. Ask them what needs "
-            f"rework, address it via {native} in {human}, then call `complete_planning_session` "
-            "again."
-        )
+        return t(language, "body.humanRejected", common)
 
     if variant == GuidanceVariant.SESSION_CLOSED:
-        return (
-            f"Planning session closed. Final phase {human}, score {score_label}, "
-            f"{actions_count} action(s) recorded. The specification is ready."
+        return t(
+            language,
+            "body.sessionClosed",
+            {"human": human, "score": score_label, "actionsCount": actions_count},
         )
 
     # GuidanceVariant.PHASE_STATUS_REPORT (and any unmatched variant).
-    gate_label = gate or "unknown"
+    gate_label = gate or t(language, "label.gateUnknown")
     if gate == "pass":
-        hint = (
-            "You may continue refining via the native operation(s), or call "
-            "`complete_planning_session` to hand off to the human."
-        )
+        hint = t(language, "body.statusReport.hintPass")
     elif gate == "fail":
-        hint = (
-            "Address the outstanding findings via the native operation(s), then call "
-            "`complete_planning_session`."
-        )
+        hint = t(language, "body.statusReport.hintFail")
     else:
-        hint = "Run any native operation to get an initial score."
-    return (
-        f"{header}: gate {gate_label}, score {score_label} (threshold {threshold_label}). "
-        f"{hint} Native operation(s): {native}."
+        hint = t(language, "body.statusReport.hintUnknown")
+    # PHASE_STATUS_REPORT is the cold-start / orientation body (SPS create, inspect): render the
+    # per-field catalog so a freshly-started session gets the fill-in guidance up front.
+    body = t(
+        language,
+        "body.statusReport",
+        {**common, "threshold": threshold_label, "gate": gate_label, "hint": hint},
     )
+    return _append_field_instructions(body, phase, language)
 
 
 # --------------------------------------------------------------------------- #
 # The umbrella composer                                                       #
 # --------------------------------------------------------------------------- #
+
+
+#: Sentinel for the ``gate_outcome`` override — distinguishes "not provided" (derive the
+#: gate) from an explicit ``None`` ("unknown", echo it verbatim).
+_UNSET: Any = object()
 
 
 def compose_response(
@@ -416,6 +418,7 @@ def compose_response(
     lifecycle_config: Mapping[str, Any] | None = None,
     validator_config: Mapping[str, Any] | None = None,
     score_global: float | None = None,
+    gate_outcome: str | None | Any = _UNSET,
 ) -> PlanningAgentResponse:
     """Compose the :class:`PlanningAgentResponse` a verb returns, keyed by ``variant``.
 
@@ -428,13 +431,19 @@ def compose_response(
     ``recommended_moves`` and ``findings`` are derived from the validator findings.
     """
 
+    language = resolve_language(lifecycle_config)
     phase = PlanningPhase(session.current_phase)
     status = PlanningSessionStatus(session.status)
     spec_id = spec_full.spec.id if spec_full is not None else session.specification_id
 
     score = validator_output.local_score if validator_output is not None else session.last_score
-    if gate_result is not None:
-        gate: GateResult | None = gate_result.gate_outcome
+    if gate_outcome is not _UNSET:
+        # An explicit per-branch verdict from the caller (CPS hard-codes it per outcome;
+        # inspect echoes the persisted ``last_gate_result``). Highest precedence — never
+        # re-derived, so the reported ``gate_result`` cannot contradict the verb outcome.
+        gate: GateResult | None = _coerce_gate(gate_outcome)
+    elif gate_result is not None:
+        gate = gate_result.gate_outcome
     elif validator_output is not None:
         # Report the PHASE-GATE verdict, not the validator's composite ``gate_result``:
         # at the ``*_expansion`` phases the composite folds in the global cascade
@@ -456,8 +465,20 @@ def compose_response(
         gate = _coerce_gate(session.last_gate_result)
 
     findings = list(validator_output.findings) if validator_output is not None else []
-    summarized, findings_summary = _summarize_findings(findings)
+    summarized, findings_summary = _summarize_findings(findings, language)
     moves = _recommended_moves(findings)
+    # The human_feedback_received status variant carries no validator findings (it never
+    # re-validates), so seed a single synthetic move — the phase's first native op, framed
+    # as "apply the feedback" — so the poll still tells the agent what to do next.
+    if variant == GuidanceVariant.HUMAN_FEEDBACK_RECEIVED and not moves:
+        native_ops = _native_ops_for_phase(phase)
+        if native_ops:
+            moves = [
+                RecommendedMove(
+                    operation=native_ops[0],
+                    rationale=t(language, "move.applyFeedback"),
+                )
+            ]
     next_entities = _next_entities(gate_result, _max_next_entities(lifecycle_config))
 
     feedback = session.pending_human_feedback
@@ -465,7 +486,7 @@ def compose_response(
         feedback.get("content") if isinstance(feedback, dict) else None
     )
 
-    next_phase_label = _next_phase_label(phase)
+    next_phase_label = _next_phase_label(phase, language)
 
     body = _compose_body(
         variant=variant,
@@ -479,6 +500,7 @@ def compose_response(
         feedback_content=feedback_content,
         actions_count=session.actions_count or 0,
         next_phase_label=next_phase_label,
+        language=language,
     )
 
     outcome: Outcome = "denied" if variant == GuidanceVariant.DENIED else "success"
@@ -511,15 +533,15 @@ def _coerce_gate(value: str | None) -> GateResult | None:
     return None
 
 
-def _next_phase_label(phase: PlanningPhase) -> str:
+def _next_phase_label(phase: PlanningPhase, language: str = DEFAULT_LANGUAGE) -> str:
     """The 'on approval, you advance to ...' label (the terminal phase closes the spec)."""
 
     if is_terminal_phase(phase):
-        return "the specification is finalized (planning complete)"
+        return t(language, "label.finalized")
     nxt = next_phase(phase)
     if nxt is None:
-        return "the specification is finalized (planning complete)"
-    return f"the session advances to {_phase_human_name(nxt)}"
+        return t(language, "label.finalized")
+    return t(language, "label.advancesTo", {"phase": _phase_human_name(nxt, language)})
 
 
 # --------------------------------------------------------------------------- #

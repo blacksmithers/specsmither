@@ -1,0 +1,20 @@
+# Overlay pt-BR para a fase cross_validation — sobrepõe apenas a prosa traduzida.
+# Os ids em `field:` são a chave de junção e NÃO são traduzidos (inclusive o sufixo `[]`).
+
+phaseHumanName: "Validação Cruzada"
+phaseGoal: "Enriquecimento relacional — declarar quais blueprints cobrem quais tickets e declarar as dependências ticket-a-ticket. Em seguida, o CPS dispara o handover terminal após validar as 10 verificações de validação cruzada."
+phaseCharacter: "relacional + terminal. Operações nativas: link_blueprint_to_tickets, unlink_blueprint_to_tickets, create_dependencies, delete_dependencies."
+
+fields:
+  - field: ticket.blueprintReferences[]
+    description: "Quais blueprints cobrem este ticket. Refinado aqui a partir dos links iniciais da Fase 5."
+    interview_hooks:
+      - "Quais blueprints descrevem artefatos que este ticket precisa seguir?"
+    na_when: "o tipo do ticket é 'verification' E o plano de testes se sustenta sozinho sem referência a blueprint"
+
+  - field: ticket.dependencies[]
+    description: "Refinamento das declarações de dependência da Fase 4. Adicione arestas visíveis apenas quando o conjunto completo de tickets existir."
+    interview_hooks:
+      - "Quais outros tickets precisam terminar primeiro?"
+      - "O que este ticket bloqueia? (declare a aresta `requires` reversa)"
+    na_when: "o ticket é fundacional/independente, sem trabalho anterior"

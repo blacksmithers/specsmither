@@ -1,6 +1,5 @@
 """Pre-check: is the spec in a plannable status for this verb?
 
-Faithful port of ``planning/pre-checks/spec-status-check.ts`` (M7.9, A1 §1.4).
 Pure — the caller loads ``spec.status`` and routes a :class:`Denied` through the
 standard denial path.
 
@@ -67,7 +66,7 @@ def _denied_not_in_planning(status: str) -> Denied:
 
 
 def recovery_hint_for_status(status: SpecStatus | str) -> str:
-    """Per-status recovery hint (``recoveryHintForStatus``, spec-status-check.ts).
+    """Per-status recovery hint.
 
     Interpolated into the ``spec_not_in_planning`` denial prose.
     """

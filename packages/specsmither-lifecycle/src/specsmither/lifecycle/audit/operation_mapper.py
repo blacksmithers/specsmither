@@ -1,11 +1,11 @@
-"""Validator-finding-path → fix-operation mapper (``audit/operation-mapper.ts``).
+"""Validator-finding-path → fix-operation mapper.
 
 A **pure**, deterministic lookup that turns a validator finding's ``path`` into the
 :data:`~specsmither.lifecycle.operations_registry.PlanningOperationName` that would
 *fix* it. It drives the L4 "recommended moves" guidance: each finding surfaced to
 the agent is annotated with the concrete verb the agent should call next.
 
-The path schema produced by the crucible validator adapter (verbatim from the TS):
+The path schema produced by the crucible validator adapter:
 
 * ``/spec/{field}`` — spec-level rubric finding.
 * ``/epics/{entityId}/{field?}`` — epic-level rubric finding.
@@ -36,14 +36,14 @@ __all__ = [
 
 @dataclass(frozen=True)
 class MapperContext:
-    """Disambiguation context for :func:`map_path_to_operation` (``MapperContext``).
+    """Disambiguation context for :func:`map_path_to_operation`.
 
     ``category`` is the validator finding's fine-grained category (e.g.
     ``"count_below_min"``) — *not* the coarse
     :class:`~specsmither.domain.enums.FindingCategory`. It only matters for the
     count/create entries whose ``category_guard`` requires an exact match.
-    ``entity_type`` / ``severity`` mirror the TS shape for forward compatibility;
-    the current mapping does not read them.
+    ``entity_type`` / ``severity`` are carried for forward compatibility; the
+    current mapping does not read them.
     """
 
     entity_type: str | None = None
@@ -53,18 +53,17 @@ class MapperContext:
 
 #: ``(compiled pattern, operation, category_guard)`` ordered most-specific-first.
 #: A ``category_guard`` of ``None`` matches unconditionally; otherwise the entry
-#: only matches when :attr:`MapperContext.category` equals it (ported verbatim from
-#: the TS ``PATTERNS`` array).
+#: only matches when :attr:`MapperContext.category` equals it.
 _PATTERNS: list[tuple[re.Pattern[str], PlanningOperationName, str | None]] = [
     # ---- Count/create signals from the structural layer (count_below_min) ----
     (re.compile(r"^/structural/epics(/|$)"), "create_epic", "count_below_min"),
     (re.compile(r"^/structural/tickets(/|$)"), "create_ticket", "count_below_min"),
     (re.compile(r"^/structural/blueprints(/|$)"), "create_blueprint", "count_below_min"),
     # ---- Cross-validation keyed by validator op ----
-    (re.compile(r"^/cross-validation/by-op/link_blueprint"), "link_blueprint_to_tickets", None),
-    (re.compile(r"^/cross-validation/by-op/unlink_blueprint"), "unlink_blueprint_to_tickets", None),
-    (re.compile(r"^/cross-validation/by-op/add_dependencies"), "create_dependencies", None),
-    (re.compile(r"^/cross-validation/by-op/remove_dependency"), "delete_dependencies", None),
+    (re.compile(r"^/cross-validation/by-op/link_blueprint_to_tickets"), "link_blueprint_to_tickets", None),
+    (re.compile(r"^/cross-validation/by-op/unlink_blueprint_to_tickets"), "unlink_blueprint_to_tickets", None),
+    (re.compile(r"^/cross-validation/by-op/create_dependencies"), "create_dependencies", None),
+    (re.compile(r"^/cross-validation/by-op/delete_dependencies"), "delete_dependencies", None),
     (re.compile(r"^/cross-validation/by-op/create_epic"), "create_epic", None),
     (re.compile(r"^/cross-validation/by-op/update_epic"), "update_epic", None),
     (re.compile(r"^/cross-validation/by-op/delete_epic"), "delete_epic", None),
@@ -111,7 +110,7 @@ def map_path_to_operation(
     Returns ``None`` for an empty or unrecognised path. ``context.category``
     disambiguates count findings: a ``/structural/epics`` path with
     ``category="count_below_min"`` maps to ``create_epic`` rather than the
-    structural ``update_spec`` catch-all (``mapPathToOperation``, lines 84-97).
+    structural ``update_spec`` catch-all.
     """
 
     if not path:

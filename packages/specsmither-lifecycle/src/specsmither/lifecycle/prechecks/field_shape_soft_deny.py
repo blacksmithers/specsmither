@@ -1,8 +1,6 @@
-"""Pre-check: soft-deny content-array items whose shape the read boundary rejects (MB.1.2).
+"""Pre-check: soft-deny content-array items whose shape the read boundary rejects.
 
-A faithful port of the ``field-shape-soft-deny`` guard added in ``bb3976ab``. Pure.
-
-Distinct from the MB.1.1 write-boundary id/order filler (``write_plan.ensure_item_ids``,
+Pure. Distinct from the write-boundary id/order filler (``write_plan.ensure_item_ids``,
 which mints the SCHEMA-internal id/order) and from the top-level enum write-guard, this catches
 CONTENT offenders nested inside the ``a.json()`` arrays of ``update_epic`` / ``update_spec`` that
 the crucible sub-models reject on read (so the whole array would silently vanish):

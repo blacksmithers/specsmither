@@ -202,6 +202,11 @@ def test_gps_active_with_pending_feedback_clears_it() -> None:
     assert comp.clear_pending_feedback is True
     assert comp.bump_last_read_at is False
     assert "Tighten the acceptance criteria." in comp.response.guidance
+    # The poll seeds a synthetic "apply the feedback" move (the phase's first native op),
+    # since it carries no validator findings of its own.
+    moves = comp.response.recommended_moves
+    assert [m.operation for m in moves] == ["update_epic"]  # epic_expansion default
+    assert moves[0].rationale == "Apply the human's feedback to the relevant entity."
 
 
 def test_gps_active_unread_approve_transition_bumps_read() -> None:

@@ -1,37 +1,37 @@
-"""Rich per-field guidance renderer — SpecForge's ``field_instruction`` catalog, ported.
+"""Rich per-field guidance renderer — the ``field_instruction`` catalog.
 
 0.1.0 shipped a deliberately-minimal English guidance composer (see
 :mod:`specsmither.lifecycle.guidance.compose`). An LLM actor could not drive the planning
 spec to a passing gate from that terse prose because it never saw the per-field
 requirements: shape, required/optional, minimum count, N/A-eligibility (and the exact
-``fieldDeclarations`` syntax used to declare it), tier, or worked examples. SpecForge's
-simulator succeeded precisely because its guidance rendered a RICH per-field catalog. This
-module ports that renderer so the same rich block feeds the SpecSmither actor.
+``fieldDeclarations`` syntax used to declare it), tier, or worked examples. A rich
+per-field catalog is what lets an actor drive the spec to a passing gate. This
+module renders that rich block for the SpecSmither actor.
 
-Ported from (SpecForge lineage, **M8.6.1** — "fields-to-fill are delivered through the
-PROSE, never a wire payload"):
+The renderer has two parts, both delivering fields-to-fill through the PROSE,
+never a wire payload:
 
-* ``packages/lifecycle/src/planning/process-guidance/compose-field-instructions.ts`` —
-  the ``renderField`` / ``naClause`` / ``composeFieldInstructions`` renderer and the
-  ``field_instruction`` template body (``packages/lifecycle/catalogs/templates.yaml``).
-* ``packages/lifecycle/src/planning/lifecycle-planning-guidance/compose-fields-to-fill.ts``
-  — ``composeFieldsToFill`` + ``detectFieldState`` (missing / partial / complete from the
-  current spec snapshot + ``minCount``), plus the ``buildFieldsBlock`` helper of
-  ``compose-phase-intro.ts`` (which excludes ``autoPopulated`` system-set fields).
+* ``renderField`` / ``naClause`` / ``composeFieldInstructions`` — the per-field
+  renderer and the ``field_instruction`` template body.
+* ``composeFieldsToFill`` + ``detectFieldState`` (missing / partial / complete from
+  the current spec snapshot + ``minCount``), plus the ``buildFieldsBlock`` helper
+  (which excludes ``autoPopulated`` system-set fields).
 
-The per-field block is reproduced byte-for-byte with SpecForge's ``renderField`` output —
-including the two-space template indent that lands the first interview-hook line at eight
-columns and the blank lines a field with no ``minCount``/``tier`` leaves before *Examples*.
-The phase header is the SpecSmither single-newline variant of the ``phase_intro`` template.
+The per-field block's exact layout matters — including the two-space template indent
+that lands the first interview-hook line at eight columns and the blank lines a field
+with no ``minCount``/``tier`` leaves before *Examples*. The phase header is the
+SpecSmither single-newline variant of the ``phase_intro`` template.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.resources import files
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
+
+from specsmither.lifecycle.i18n import t, text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -40,6 +40,10 @@ __all__ = ["compose_field_instructions"]
 
 #: Import-package that owns the ``catalogs/`` data directory.
 _CATALOG_PACKAGE = "specsmither.lifecycle.guidance"
+
+#: The canonical guidance language; a per-phase catalog with no ``<phase>.<lang>.yaml``
+#: overlay renders in this language.
+_DEFAULT_LANGUAGE = "en"
 
 _FieldState = Literal["empty", "partial", "filled"]
 
@@ -76,18 +80,79 @@ class _PhaseCatalog:
 # Catalog loading (importlib.resources + per-phase cache)                      #
 # --------------------------------------------------------------------------- #
 
-#: Per-phase catalog cache. ``None`` memoizes "no catalog for this phase" (e.g. ``planned``).
-_CATALOG_CACHE: dict[str, _PhaseCatalog | None] = {}
+#: Per-(phase, language) catalog cache. ``None`` memoizes "no catalog for this phase"
+#: (e.g. ``planned``).
+_CATALOG_CACHE: dict[tuple[str, str], _PhaseCatalog | None] = {}
 
 
-def _load_catalog(phase: str) -> _PhaseCatalog | None:
-    """Load (and cache) the ``catalogs/<phase>.yaml`` catalog; ``None`` when absent."""
+def _load_catalog(phase: str, language: str = _DEFAULT_LANGUAGE) -> _PhaseCatalog | None:
+    """Load (and cache) the ``catalogs/<phase>.yaml`` catalog for ``language``.
 
-    if phase in _CATALOG_CACHE:
-        return _CATALOG_CACHE[phase]
+    The English catalog is the source of truth; a non-default ``language`` overlays
+    the translated phase-content prose from ``catalogs/<phase>.<language>.yaml`` (a
+    per-key/per-field fallback to English), so a missing overlay renders in English.
+    ``None`` when the phase has no catalog at all.
+    """
+
+    key = (phase, language)
+    if key in _CATALOG_CACHE:
+        return _CATALOG_CACHE[key]
     catalog = _read_catalog(phase)
-    _CATALOG_CACHE[phase] = catalog
+    if catalog is not None and language != _DEFAULT_LANGUAGE:
+        catalog = _overlay_catalog(catalog, phase, language)
+    _CATALOG_CACHE[key] = catalog
     return catalog
+
+
+def _overlay_catalog(base: _PhaseCatalog, phase: str, language: str) -> _PhaseCatalog:
+    """Overlay ``base`` with the translated prose from ``<phase>.<language>.yaml``.
+
+    Only natural-language prose is overlaid — phase goal/character/human-name and,
+    per field (matched by ``field`` id), ``description`` / ``interview_hooks`` /
+    ``na_when``. Structural facts (required, shape, minCount, tier, naEligible,
+    autoPopulated) and code-literal ``examples`` stay canonical. A missing overlay
+    file, key, or field falls back to the English value.
+    """
+
+    resource = files(_CATALOG_PACKAGE).joinpath(f"catalogs/{phase}.{language}.yaml")
+    if not resource.is_file():
+        return base
+    raw: Any = yaml.safe_load(resource.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return base
+    by_id: dict[str, Mapping[str, Any]] = {
+        str(entry.get("field", "")): entry
+        for entry in raw.get("fields", [])
+        if isinstance(entry, dict)
+    }
+    fields = tuple(_overlay_field(field, by_id.get(field.field)) for field in base.fields)
+    return replace(
+        base,
+        phase_human_name=str(raw.get("phaseHumanName") or base.phase_human_name),
+        phase_goal=str(raw.get("phaseGoal") or base.phase_goal),
+        phase_character=str(raw.get("phaseCharacter") or base.phase_character),
+        fields=fields,
+    )
+
+
+def _overlay_field(field: _FieldEntry, tr: Mapping[str, Any] | None) -> _FieldEntry:
+    """Overlay one field's translatable prose (``None`` → the English entry unchanged)."""
+
+    if tr is None:
+        return field
+    description = tr.get("description")
+    na_when = tr.get("na_when")
+    hooks = tr.get("interview_hooks")
+    return replace(
+        field,
+        description=str(description) if description is not None else field.description,
+        na_when=str(na_when) if na_when else field.na_when,
+        interview_hooks=(
+            tuple(str(hook) for hook in hooks)
+            if isinstance(hooks, list) and hooks
+            else field.interview_hooks
+        ),
+    )
 
 
 def _read_catalog(phase: str) -> _PhaseCatalog | None:
@@ -142,7 +207,7 @@ def _parse_field(raw: Mapping[str, Any]) -> _FieldEntry:
 
 
 # --------------------------------------------------------------------------- #
-# Field-state detection (compose-fields-to-fill.ts detectFieldState)           #
+# Field-state detection (detectFieldState)                                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -150,8 +215,8 @@ def _field_state(field: _FieldEntry, snapshot: Mapping[str, Any]) -> _FieldState
     """State of ``field`` against the flat ``snapshot`` (the ``composeFieldsToFill`` lookup).
 
     The snapshot is probed by the dot-stripped key first (``epic.scope.inScope`` →
-    ``scope.inScope``) then by the full field id, mirroring the TS ``?.[fieldKey] ??
-    ?.[entry.field]`` coalescing (only a *missing* first key falls through).
+    ``scope.inScope``) then by the full field id — a coalescing lookup where only a
+    *missing* first key falls through.
     """
 
     stripped = field.field.split(".", 1)[1] if "." in field.field else field.field
@@ -178,60 +243,71 @@ def _detect_field_state(value: Any, field: _FieldEntry) -> _FieldState:
 
 
 # --------------------------------------------------------------------------- #
-# Per-field rendering (compose-field-instructions.ts renderField / naClause)   #
+# Per-field rendering (renderField / naClause)                                 #
 # --------------------------------------------------------------------------- #
 
 
-def _bullet(items: Sequence[str], indent: str = "      ") -> str:
+def _bullet(
+    items: Sequence[str], indent: str = "      ", language: str = _DEFAULT_LANGUAGE
+) -> str:
     """Bulleted list (``bullet`` helper). ``(none)`` when empty; each item at ``indent``."""
 
     if items:
         return "\n".join(f"{indent}- {item}" for item in items)
-    return f"{indent}- (none)"
+    return f"{indent}- {text(language, 'field.bulletNone')}"
 
 
-def _na_clause(field: _FieldEntry) -> str:
-    """The field-level N/A instruction (``naClause`` — the real M8.6.3 mechanism)."""
+def _na_clause(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:
+    """The field-level N/A instruction (``naClause``).
+
+    Post-justify, N/A is declared with the dedicated ``justify`` op (a late
+    ``update_*`` carrying only ``fieldDeclarations`` is stripped, then rolls back),
+    so the clause names the ``justify`` op + the bare N/A scope (the field id with its
+    ``spec.`` / ``epic.`` / ``ticket.`` prefix dropped — the scope ``justify`` validates).
+    """
 
     if not field.na_eligible:
-        return "Not N/A-eligible — must be filled."
-    when = f" when {field.na_when}" if field.na_when else ""
-    return (
-        f"N/A-eligible{when}: declare via `update_*` with "
-        f'`fieldDeclarations: {{ "{field.field}": '
-        f'{{ "value": "N/A", "reason": "<≥20 chars>" }} }}`.'
-    )
+        return text(language, "field.naNotEligible")
+    when = t(language, "field.naWhen", {"naWhen": field.na_when}) if field.na_when else ""
+    scope = field.field.split(".", 1)[1] if "." in field.field else field.field
+    return t(language, "field.naEligible", {"when": when, "scope": scope})
 
 
-def _render_field(field: _FieldEntry) -> str:
-    """Render one field via the ``field_instruction`` template body (byte-exact)."""
+def _render_field(field: _FieldEntry, language: str = _DEFAULT_LANGUAGE) -> str:
+    """Render one field via the ``field_instruction`` template body."""
 
-    required_label = "(required)" if field.required else "(optional)"
+    required_key = "field.required" if field.required else "field.optional"
     min_count_clause = (
-        f"    - Minimum count: {field.min_count}" if field.min_count is not None else ""
+        t(language, "field.minCount", {"minCount": field.min_count})
+        if field.min_count is not None
+        else ""
     )
-    tier_clause = f"    - Tier: {field.tier}" if field.tier else ""
-    return (
-        f"For **`{field.field}`** {required_label}:\n"
-        f"- Shape: `{field.shape}`\n"
-        f"- {field.description}\n"
-        f"- Interview hooks:\n"
-        f"  {_bullet(field.interview_hooks)}\n"
-        f"- {_na_clause(field)}\n"
-        f"{min_count_clause}\n"
-        f"{tier_clause}\n"
-        f"\n"
-        f"Examples:\n"
-        f"{_bullet(field.examples)}\n"
+    tier_clause = t(language, "field.tier", {"tier": field.tier}) if field.tier else ""
+    return t(
+        language,
+        "field.render",
+        {
+            "field": field.field,
+            "requiredLabel": text(language, required_key),
+            "shape": field.shape,
+            "description": field.description,
+            "hooks": _bullet(field.interview_hooks, language=language),
+            "naClause": _na_clause(field, language),
+            "minCountClause": min_count_clause,
+            "tierClause": tier_clause,
+            "examples": _bullet(field.examples, language=language),
+        },
     )
 
 
-def _compose_field_instructions(fields: Sequence[_FieldEntry]) -> str:
+def _compose_field_instructions(
+    fields: Sequence[_FieldEntry], language: str = _DEFAULT_LANGUAGE
+) -> str:
     """The full per-field block for a phase's fields (``composeFieldInstructions``)."""
 
     if not fields:
-        return "(no fillable fields in this phase)"
-    return "\n".join(_render_field(field) for field in fields)
+        return text(language, "field.noneFillable")
+    return "\n".join(_render_field(field, language) for field in fields)
 
 
 # --------------------------------------------------------------------------- #
@@ -242,21 +318,24 @@ def _compose_field_instructions(fields: Sequence[_FieldEntry]) -> str:
 def compose_field_instructions(
     phase: str,
     spec_snapshot: Mapping[str, Any] | None = None,
+    language: str = _DEFAULT_LANGUAGE,
 ) -> str:
-    """Render the rich per-field guidance block for ``phase``.
+    """Render the rich per-field guidance block for ``phase`` in ``language``.
 
     Returns ``""`` for phases with no catalog (e.g. ``planned``). System-set /
     not-agent-fillable fields (``autoPopulated``) are always excluded — the actor never
     fills those. When ``spec_snapshot`` is given only the fields still needing work
     (``empty`` / ``partial``) render; when it is ``None`` the full phase catalog renders
     (the phase-intro / orientation view). The block is prefixed with the phase header.
+    A non-default ``language`` overlays the translated phase-content prose (English
+    fallback per key); the structural frame comes from the shared text catalog.
     """
 
-    catalog = _load_catalog(phase)
+    catalog = _load_catalog(phase, language)
     if catalog is None:
         return ""
 
-    # buildFieldsBlock (M8.6.6): exclude system-set fields the agent never fills.
+    # buildFieldsBlock: exclude system-set fields the agent never fills.
     fields = [field for field in catalog.fields if not field.auto_populated]
     if spec_snapshot is not None:
         fields = [
@@ -265,11 +344,14 @@ def compose_field_instructions(
             if _field_state(field, spec_snapshot) in ("empty", "partial")
         ]
 
-    header = (
-        f"You are in phase {catalog.phase_index} of 6: {catalog.phase_human_name}.\n"
-        f"Goal: {catalog.phase_goal}\n"
-        f"Character: {catalog.phase_character}\n"
-        f"\n"
-        f"What to do in this phase:"
+    header = t(
+        language,
+        "field.header",
+        {
+            "idx": catalog.phase_index,
+            "name": catalog.phase_human_name,
+            "goal": catalog.phase_goal,
+            "character": catalog.phase_character,
+        },
     )
-    return f"{header}\n{_compose_field_instructions(fields)}".rstrip()
+    return f"{header}\n{_compose_field_instructions(fields, language)}".rstrip()

@@ -1,6 +1,6 @@
-"""The 9 planning pre-checks (A1 §1.4) — pure ``(…) -> Accepted | Denied`` guards.
+"""The 9 planning pre-checks — pure ``(…) -> Accepted | Denied`` guards.
 
-Faithful port of ``planning/pre-checks/*``. Each check is a side-effect-free
+Each check is a side-effect-free
 function the APS / CPS pipeline (L4) runs in order; the first :class:`Denied`
 short-circuits the verb into a denial envelope. The shared result union lives in
 :mod:`.result` (:class:`Accepted` carries the ``rollback`` / ``auto_transition``
@@ -38,6 +38,7 @@ from specsmither.lifecycle.prechecks.dependencies_batch import (
     BatchValidationOk,
     BatchValidationResult,
     DetectedCycle,
+    batch_deduped_denial,
     run_dependencies_batch,
     validate_dependencies_batch,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "DetectedCycle",
     "PrecheckResult",
     "SpecStatusVerb",
+    "batch_deduped_denial",
     "blueprint_epic_ratio",
     "blueprint_link_refs_exist",
     "cascade_rules",

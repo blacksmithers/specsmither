@@ -1,11 +1,11 @@
-"""The per-operation phase-guard table — the 15-op registry + classifier.
+"""The per-operation phase-guard table — the 17-op registry + classifier.
 
-Verbatim port of ``planning/operations-registry.ts`` (A1 §1.2). Pure: a static
+Pure: a static
 data table plus two functions, no I/O, no dependencies beyond the
 :class:`~specsmither.domain.enums.PlanningPhase` vocabulary.
 
 :data:`OPERATIONS` maps every :data:`PlanningOperationName` to an
-:class:`OperationDef` (15 real ops: 14 mutating + 1 read-only) or to ``None``
+:class:`OperationDef` (17 real ops: 16 mutating + 1 read-only) or to ``None``
 (the 9 synthetic / audit-only ops, which have no callable definition). Each
 :class:`OperationDef` records the operation's *home* phase (``native_phase``),
 the phases in which it is outright rejected (``forbidden_phases``), an optional
@@ -17,9 +17,9 @@ running an operation: ``forbidden`` (reject), ``native`` (home phase — proceed
 or ``late`` (allowed, but the caller is working past the native phase, which
 triggers a phase rollback elsewhere in the lifecycle).
 
-Faithful-port notes (values that affect outputs, replicated verbatim):
+Notes on values that affect outputs:
 
-* ``create_dependencies`` carries ``max_batch == 5000`` (the M7.7 bump — **not**
+* ``create_dependencies`` carries ``max_batch == 5000`` (**not**
   100): real planning sessions ship a full dependency graph in one shot, and the
   batch pre-check dedups + cycle-checks before any write.
 * ``delete_epic`` / ``delete_ticket`` carry a ``minCount`` guard (at least one
@@ -56,8 +56,7 @@ __all__ = [
 # Vocabulary                                                                   #
 # --------------------------------------------------------------------------- #
 
-#: Every planning operation name (mutating + read-only + synthetic). Mirrors the
-#: TS ``PlanningOperationName`` union (session-types ``PLANNING_OPERATIONS``).
+#: Every planning operation name (mutating + read-only + synthetic).
 PlanningOperationName = Literal[
     # mutating
     "update_spec",
@@ -74,6 +73,8 @@ PlanningOperationName = Literal[
     "unlink_blueprint_to_tickets",
     "create_dependencies",
     "delete_dependencies",
+    "justify",
+    "unjustify",
     # read-only
     "get_planning_status",
     # synthetic / audit-only
@@ -100,7 +101,7 @@ NativePhase = PlanningPhase | Literal["any"]
 OperationCallClass = Literal["forbidden", "native", "late"]
 """Classification of an ``(op, phase)`` call — see :func:`classify_operation_call`."""
 
-#: The 14 mutating planning operations (session-types
+#: The 16 mutating planning operations (session-types
 #: ``PLANNING_MUTATING_OPERATIONS``).
 PLANNING_MUTATING_OPERATIONS: Final[tuple[PlanningOperationName, ...]] = (
     "update_spec",
@@ -117,6 +118,8 @@ PLANNING_MUTATING_OPERATIONS: Final[tuple[PlanningOperationName, ...]] = (
     "unlink_blueprint_to_tickets",
     "create_dependencies",
     "delete_dependencies",
+    "justify",
+    "unjustify",
 )
 
 #: The single read-only planning operation (session-types
@@ -171,6 +174,10 @@ class OperationDef:
     max_batch: int | None = None
     #: Pre-condition guards that must pass before the operation is accepted.
     guards: tuple[GuardSpec, ...] = ()
+    #: A CONTIGUOUS band of phases in which the op is native (no rollback), beyond the
+    #: single ``native_phase``. When set, ``native_phase`` is the earliest member (the
+    #: rollback anchor). Empty = the op is native only in its single ``native_phase``.
+    native_phases: tuple[PlanningPhase, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -191,7 +198,7 @@ _ALL_PHASES: Final[tuple[PlanningPhase, ...]] = (
 def _phases_before(end: PlanningPhase) -> tuple[PlanningPhase, ...]:
     """Phases from the start up to (and excluding) ``end``.
 
-    Mirrors the TS ``phasesBefore``: ``indexOf(end) <= 0`` yields ``()``.
+    ``index(end) <= 0`` yields ``()``.
     """
 
     try:
@@ -202,7 +209,7 @@ def _phases_before(end: PlanningPhase) -> tuple[PlanningPhase, ...]:
 
 
 # --------------------------------------------------------------------------- #
-# The registry: 15 operations (14 mutating + 1 read-only) + 9 synthetic nulls  #
+# The registry: 17 operations (16 mutating + 1 read-only) + 9 synthetic nulls  #
 # --------------------------------------------------------------------------- #
 
 OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
@@ -315,7 +322,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         ),
     ),
     # 8. create_blueprint — native: epic_decomposition; forbidden in planning_spec.
-    #    ME.10.4 — NO guard: the blueprint:epic ratio is a delete-side hard-deny only.
+    #    NO guard: the blueprint:epic ratio is a delete-side hard-deny only.
     "create_blueprint": OperationDef(
         name="create_blueprint",
         kind="mutating",
@@ -352,26 +359,39 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
             ),
         ),
     ),
-    # 11. link_blueprint_to_tickets — native: cross_validation; forbidden in all phases before it.
+    # 11. link_blueprint_to_tickets — native across ticket_decomposition → cross_validation
+    #     (the verb is the sole blueprint-link writer; cross_validation settles coverage).
+    #     Forbidden in every phase before ticket_decomposition; native_phase is the earliest
+    #     band member (the rollback anchor).
     "link_blueprint_to_tickets": OperationDef(
         name="link_blueprint_to_tickets",
         kind="mutating",
-        native_phase=PlanningPhase.CROSS_VALIDATION,
-        forbidden_phases=(*_phases_before(PlanningPhase.CROSS_VALIDATION), PlanningPhase.PLANNED),
+        native_phase=PlanningPhase.TICKET_DECOMPOSITION,
+        native_phases=(
+            PlanningPhase.TICKET_DECOMPOSITION,
+            PlanningPhase.TICKET_EXPANSION,
+            PlanningPhase.CROSS_VALIDATION,
+        ),
+        forbidden_phases=(*_phases_before(PlanningPhase.TICKET_DECOMPOSITION), PlanningPhase.PLANNED),
         multi_actor=False,
-        description="Link a blueprint to one or more tickets during cross_validation.",
+        description="Link a blueprint to one or more tickets from ticket_decomposition onward.",
     ),
-    # 12. unlink_blueprint_to_tickets — native: cross_validation; forbidden in all phases before it.
+    # 12. unlink_blueprint_to_tickets — native across ticket_decomposition → cross_validation.
     "unlink_blueprint_to_tickets": OperationDef(
         name="unlink_blueprint_to_tickets",
         kind="mutating",
-        native_phase=PlanningPhase.CROSS_VALIDATION,
-        forbidden_phases=(*_phases_before(PlanningPhase.CROSS_VALIDATION), PlanningPhase.PLANNED),
+        native_phase=PlanningPhase.TICKET_DECOMPOSITION,
+        native_phases=(
+            PlanningPhase.TICKET_DECOMPOSITION,
+            PlanningPhase.TICKET_EXPANSION,
+            PlanningPhase.CROSS_VALIDATION,
+        ),
+        forbidden_phases=(*_phases_before(PlanningPhase.TICKET_DECOMPOSITION), PlanningPhase.PLANNED),
         multi_actor=False,
-        description="Unlink a blueprint from one or more tickets during cross_validation.",
+        description="Unlink a blueprint from one or more tickets from ticket_decomposition onward.",
     ),
     # 13. create_dependencies — native: cross_validation; forbidden in all phases before it;
-    #     max_batch = 5000 (M7.7 — not 100).
+    #     max_batch = 5000 (not 100).
     "create_dependencies": OperationDef(
         name="create_dependencies",
         kind="mutating",
@@ -393,7 +413,34 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
         multi_actor=False,
         description="Delete dependency links between tickets during cross_validation.",
     ),
-    # 15. get_planning_status — any phase, always native, never forbidden (M6.6).
+    # 15/16. justify / unjustify — the paired N/A-declaration ops. STRUCTURAL-NEUTRAL:
+    #     they change no structural set (no files/deps/bodies), only a
+    #     {value:'N/A',reason} declaration, so like get_planning_status they are native in
+    #     EVERY planning phase and NEVER roll back (native_phase='any'). Valid from
+    #     planning_spec through cross_validation; forbidden only once planned.
+    "justify": OperationDef(
+        name="justify",
+        kind="mutating",
+        native_phase="any",
+        forbidden_phases=(PlanningPhase.PLANNED,),
+        multi_actor=False,
+        description=(
+            "Declare a field N/A with a reason (writes the canonical fieldDeclarations[scope] "
+            "key); structural-neutral, native in every planning phase, never rolls back."
+        ),
+    ),
+    "unjustify": OperationDef(
+        name="unjustify",
+        kind="mutating",
+        native_phase="any",
+        forbidden_phases=(PlanningPhase.PLANNED,),
+        multi_actor=False,
+        description=(
+            "Remove an N/A declaration (clears the canonical fieldDeclarations[scope] key); "
+            "structural-neutral, native in every planning phase, never rolls back."
+        ),
+    ),
+    # 17. get_planning_status — any phase, always native, never forbidden.
     "get_planning_status": OperationDef(
         name="get_planning_status",
         kind="read-only",
@@ -421,8 +468,7 @@ OPERATIONS: Final[dict[PlanningOperationName, OperationDef | None]] = {
 def _assert_non_synthetic_ops_present() -> None:
     """Exhaustivity check: every mutating/read-only op has a non-null def.
 
-    Mirrors the TS IIFE (operations-registry.ts:282-292) — guards against a key
-    silently dropping out of :data:`OPERATIONS`.
+    Guards against a key silently dropping out of :data:`OPERATIONS`.
     """
 
     for op in (*PLANNING_MUTATING_OPERATIONS, *PLANNING_READ_ONLY_OPERATIONS):
@@ -459,6 +505,10 @@ def classify_operation_call(
 
     if current_phase in spec.forbidden_phases:
         return "forbidden"
+    # An op native across a CONTIGUOUS band (native_phases) is native in every member —
+    # no rollback (e.g. blueprint-link across ticket_decomposition → cross_validation).
+    if current_phase in spec.native_phases:
+        return "native"
     if spec.native_phase == "any" or spec.native_phase == current_phase:
         return "native"
     # Not forbidden and not the native phase: it must be a late call.

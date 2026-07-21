@@ -269,7 +269,7 @@ def test_map_path_ticket_dependencies_and_blueprint_refs_precede_generic_ticket(
 
 def test_map_path_cross_validation_by_op() -> None:
     assert (
-        map_path_to_operation("/cross-validation/by-op/add_dependencies")
+        map_path_to_operation("/cross-validation/by-op/create_dependencies")
         == "create_dependencies"
     )
     assert map_path_to_operation("/cross-validation/by-op/set_metadata") == "update_spec"

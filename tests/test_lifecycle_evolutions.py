@@ -183,7 +183,7 @@ def test_blueprint_link_refs_exist_denies_unknown_ids() -> None:
     denied = blueprint_link_refs_exist(
         "link_blueprint_to_tickets", {"blueprintId": "ghost", "ticketIds": ["t1"]}, _spec_full()
     )
-    assert isinstance(denied, Denied) and denied.code == "dangling_reference"
+    assert isinstance(denied, Denied) and denied.code == "broken_reference"
     ok = blueprint_link_refs_exist(
         "link_blueprint_to_tickets", {"blueprintId": "bp1", "ticketIds": ["t1"]}, _spec_full()
     )
@@ -205,10 +205,19 @@ def test_field_shape_soft_deny_flags_bad_contract_type_and_missing_content() -> 
 
 
 def test_structural_create_in_expansion_is_soft_denied() -> None:
-    denied = operation_allowed("create_epic", PlanningPhase.EPIC_EXPANSION, {})
+    # The soft-deny guards exactly ONE pair — create_ticket in the scored ticket_expansion
+    # phase — where a late create would roll the session back and orphan a fresh ticket.
+    denied = operation_allowed("create_ticket", PlanningPhase.TICKET_EXPANSION, {})
     assert isinstance(denied, Denied) and denied.code == "structural_create_in_expansion"
-    # a create in its native decomposition phase is still accepted.
-    assert isinstance(operation_allowed("create_epic", PlanningPhase.EPIC_DECOMPOSITION, {}), Accepted)
+    # create_epic / create_blueprint in an expansion phase are late ops that legitimately
+    # roll back to their native phase and create — NOT soft-denied.
+    epic_late = operation_allowed("create_epic", PlanningPhase.EPIC_EXPANSION, {})
+    assert isinstance(epic_late, Accepted) and epic_late.rollback is True
+    blueprint_late = operation_allowed("create_blueprint", PlanningPhase.TICKET_EXPANSION, {})
+    assert isinstance(blueprint_late, Accepted) and blueprint_late.rollback is True
+    # a create in its native decomposition phase is accepted without rollback.
+    native = operation_allowed("create_epic", PlanningPhase.EPIC_DECOMPOSITION, {})
+    assert isinstance(native, Accepted) and native.rollback is False
 
 
 def test_content_shape_valid_rejects_poison_across_entities() -> None:

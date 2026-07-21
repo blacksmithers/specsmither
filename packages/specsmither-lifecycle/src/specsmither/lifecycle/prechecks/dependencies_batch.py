@@ -1,7 +1,6 @@
 """Pre-check: validate a ``create_dependencies`` batch before any write.
 
-Faithful port of ``planning/pre-checks/dependencies-batch-validation.ts`` (M7.7,
-A1 §1.4) + the APS-side denial mapping (action-planning-session.ts:171-207). Pure.
+Validates the batch plus the APS-side denial mapping. Pure.
 
 :func:`run_dependencies_batch` runs three sequential checks over the incoming
 batch and returns the rich :data:`BatchValidationResult` the L4 pipeline persists
@@ -20,7 +19,7 @@ chain calls: it maps the rich result onto :class:`Accepted` | :class:`Denied`
 (``cycle_detected`` if any cycle, else ``batch_fully_deduped`` if nothing
 survives dedup, else accepted).
 
-The cross-existing cycle uses the TS incremental ``findPath`` walk rather than the
+The cross-existing cycle uses an incremental ``find_path`` walk rather than the
 shared :func:`specsmither.dag.critical_path.find_cycles` SCC pass: only the
 incremental walk can drop the single offending edge and report the closing edge
 per cycle (SCC over the merged set cannot attribute a cycle to a specific
@@ -40,6 +39,7 @@ __all__ = [
     "BatchValidationOk",
     "BatchValidationResult",
     "DetectedCycle",
+    "batch_deduped_denial",
     "run_dependencies_batch",
     "validate_dependencies_batch",
 ]
@@ -87,7 +87,7 @@ def _edge_key(edge: SpecDependencyEdge) -> str:
 def _find_path(
     start: str, goal: str, adjacency: dict[str, list[str]]
 ) -> list[SpecDependencyEdge] | None:
-    """Find a directed path ``start ⇝ goal`` over ``adjacency`` (``findPath``).
+    """Find a directed path ``start ⇝ goal`` over ``adjacency``.
 
     Iterative DFS tracking the edge trail to reconstruct the path. Returns the
     ordered edge list, or ``None`` if ``goal`` is unreachable from ``start``.
@@ -114,13 +114,13 @@ def run_dependencies_batch(
     existing: Sequence[SpecDependencyEdge],
     tickets: Sequence[TicketRef] = (),
 ) -> BatchValidationResult:
-    """Dedup + cycle-check ``incoming`` against ``existing`` (``validateDependenciesBatch``).
+    """Dedup + cycle-check ``incoming`` against ``existing``.
 
     ``tickets`` is reserved for caller-side ticket-existence guards (unused here,
-    matching the source's I/O-free contract).
+    keeping this check I/O-free).
     """
 
-    del tickets  # reserved; the algorithm is graph-only (parity with the TS)
+    del tickets  # reserved; the algorithm is graph-only
 
     # ---- 1. intra-batch dedup --------------------------------------------- #
     seen: set[str] = set()
@@ -184,6 +184,22 @@ def _format_cycle(cycle: DetectedCycle) -> str:
     return " -> ".join(nodes)
 
 
+def batch_deduped_denial(result: BatchValidationOk) -> Denied:
+    """The ``batch_fully_deduped`` deny — every submitted edge was a duplicate."""
+
+    return Denied(
+        code="batch_fully_deduped",
+        message=(
+            "Every submitted dependency is a duplicate (within the batch or "
+            "already persisted); nothing new to add."
+        ),
+        context={
+            "dropped_intra_batch": len(result.dropped_intra_batch),
+            "dropped_persisted": len(result.dropped_persisted),
+        },
+    )
+
+
 def validate_dependencies_batch(
     incoming: Sequence[SpecDependencyEdge],
     existing: Sequence[SpecDependencyEdge],
@@ -194,7 +210,8 @@ def validate_dependencies_batch(
     ``cycle_detected`` (with formatted cycle paths as ``blockers``) takes
     precedence; otherwise ``batch_fully_deduped`` when nothing survives dedup;
     otherwise accepted. The L4 pipeline calls :func:`run_dependencies_batch`
-    directly when it also needs the surviving ``to_persist`` edges.
+    directly — it also needs the surviving ``to_persist`` edges, and it enriches
+    the ``cycle_detected`` deny with the per-edge evidence + recovery packet.
     """
 
     result = run_dependencies_batch(incoming, existing, tickets)
@@ -208,16 +225,6 @@ def validate_dependencies_batch(
         )
 
     if not result.to_persist:
-        return Denied(
-            code="batch_fully_deduped",
-            message=(
-                "Every submitted dependency is a duplicate (within the batch or "
-                "already persisted); nothing new to add."
-            ),
-            context={
-                "dropped_intra_batch": len(result.dropped_intra_batch),
-                "dropped_persisted": len(result.dropped_persisted),
-            },
-        )
+        return batch_deduped_denial(result)
 
     return Accepted()

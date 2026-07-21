@@ -1,5 +1,4 @@
-"""``action_planning_session`` (APS) — the engine spine (A1 §1.4), ported from
-``planning/verbs/action-planning-session.ts``.
+"""``action_planning_session`` (APS) — the engine spine.
 
 Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 
@@ -13,7 +12,7 @@ Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 2. on accept — project the mutation in memory, compute the *effective* phase (a late
    op rewinds to its native phase), re-validate the projected spec, evaluate the
    phase gate, build the audit action (+ a rollback transition for a late op), apply
-   the M11.1 actor-conditional post-status, and assemble the success WritePlan.
+   the actor-conditional post-status, and assemble the success WritePlan.
 
 ``payload`` is ``{sessionId, operation, payload?, actor?, userId?}``.
 """
@@ -39,6 +38,7 @@ from specsmither.lifecycle.guidance.compose import (
     compose_get_planning_status,
     compose_response,
 )
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.operations_registry import (
     OPERATIONS,
     PlanningOperationName,
@@ -46,7 +46,9 @@ from specsmither.lifecycle.operations_registry import (
 )
 from specsmither.lifecycle.ports import SpecDependencyEdge
 from specsmither.lifecycle.prechecks import (
+    BatchValidationCycle,
     Denied,
+    batch_deduped_denial,
     blueprint_epic_ratio,
     blueprint_link_refs_exist,
     cascade_rules,
@@ -57,10 +59,16 @@ from specsmither.lifecycle.prechecks import (
     enum_field_guards,
     field_shape_soft_deny,
     operation_allowed,
+    run_dependencies_batch,
     schema_validate,
     spec_status_check,
-    validate_dependencies_batch,
 )
+from specsmither.lifecycle.prechecks.cross_val_file_redirect import cross_val_file_redirect
+from specsmither.lifecycle.prechecks.strip_field_declarations import (
+    strip_agent_wire_field_declarations,
+)
+from specsmither.lifecycle.verbs.cycle_guidance import build_cycle_detected_denial
+from specsmither.lifecycle.verbs.justify_support import JustifyResolution, resolve_justify
 from specsmither.lifecycle.verbs.support import (
     SessionNotFoundError,
     VerbResult,
@@ -88,6 +96,32 @@ if TYPE_CHECKING:
 
 __all__ = ["action_planning_session"]
 
+#: Resolved-entity kind → the ``update_*`` op whose mutation machinery justify reuses.
+_ENTITY_UPDATE_OP: dict[str, str] = {
+    "spec": "update_spec",
+    "epic": "update_epic",
+    "ticket": "update_ticket",
+}
+
+
+def _justify_mutation(res: JustifyResolution) -> tuple[str, dict[str, Any]]:
+    """The synthetic ``update_*`` ``(op, payload)`` a justify/unjustify resolves to — a
+    ``SpecMutation`` SET of the merged ``fieldDeclarations`` on the resolved entity."""
+    payload: dict[str, Any] = {"fields": {"fieldDeclarations": res.field_declarations}}
+    if res.entity_type != "spec":
+        payload["id"] = res.entity_id
+    return _ENTITY_UPDATE_OP[res.entity_type], payload
+
+
+def _na_reason_min_length(validator_config: Mapping[str, Any]) -> int:
+    """The ``naReason.minLength`` bound (default 20) justify enforces on the reason."""
+    na = validator_config.get("naReason")
+    if isinstance(na, dict):
+        raw = na.get("minLength")
+        if isinstance(raw, int):
+            return raw
+    return 20
+
 
 def action_planning_session(
     payload: Mapping[str, Any], ports: LifecyclePorts
@@ -108,7 +142,8 @@ def action_planning_session(
     light_spec = ports.spec_store.get_spec(session.specification_id)
     project_id = light_spec.project_id if light_spec is not None else ""
     lifecycle_config = resolve_lifecycle_config(
-        ports.config_store, project_id, session.specification_id
+        ports.config_store, project_id, session.specification_id,
+        default_language=ports.default_language,
     )
     validator_config = resolve_validator_config(
         ports.config_store, project_id, session.specification_id
@@ -149,11 +184,17 @@ def action_planning_session(
         return _denied(ports, session, operation, op_payload, op_allowed, user_id, lifecycle_config, validator_config)
     is_late_op = op_allowed.rollback
 
+    # The agent-wire clean break: strip `fieldDeclarations` from update_*/create_* payloads
+    # AFTER operation_allowed has classified the op (rollback decision unchanged) so the key
+    # never reaches the persisted mutation NOR the projection. `justify`/`unjustify` own the
+    # canonical key and are excluded (no-op here).
+    op_payload = strip_agent_wire_field_declarations(operation, op_payload)
+
     schema_result = schema_validate(operation, op_payload)
     if isinstance(schema_result, Denied):
         return _denied(ports, session, operation, op_payload, schema_result, user_id, lifecycle_config, validator_config)
 
-    # MB.1.2 / ME.14.2 — payload-only shape + enum-poison guards (off-enum apiContract type,
+    # payload-only shape + enum-poison guards (off-enum apiContract type,
     # content-less structure, off-enum nfr/guardrail/techStack/goal/requirement values) run
     # before the spec_full load, alongside schema_validate. Without these an off-enum value
     # crashes the typed write boundary as an opaque INTERNAL error the agent can't recover from.
@@ -176,7 +217,7 @@ def action_planning_session(
     for check in (
         count_bounds(operation, op_payload or {}, spec_full, validator_config),
         cross_cut_references(operation, op_payload or {}, spec_full),
-        # #11a / MB.2 — FK-existence guards: deny a write referencing an unknown epic /
+        # FK-existence guards: deny a write referencing an unknown epic /
         # ticket / blueprint id (raw IntegrityError or phantom-success) with the valid roster.
         entity_refs_exist(operation, op_payload or {}, spec_full),
         blueprint_link_refs_exist(operation, op_payload or {}, spec_full),
@@ -193,9 +234,35 @@ def action_planning_session(
             )
             for edge in (op_payload or {}).get("dependencies", [])
         ]
-        batch = validate_dependencies_batch(incoming, spec_full.dependencies)
-        if isinstance(batch, Denied):
-            return _denied(ports, session, operation, op_payload, batch, user_id, lifecycle_config, validator_config)
+        batch_result = run_dependencies_batch(incoming, spec_full.dependencies)
+        if isinstance(batch_result, BatchValidationCycle):
+            # Enrich the bare "remove the offending edge" deny with the per-edge evidence
+            # (file-backing + epic/order) + a per-edge recovery plan. The analyzer reads the
+            # projected spec's file/order model; create_dependencies only ADDS edges, so the
+            # pre-mutation spec == the projected spec for this analysis. The intra-batch-vs-
+            # persisted origin tag is computed lifecycle-side from the persisted graph.
+            spec_dict = spec_full.spec.model_dump(by_alias=True, exclude_none=True)
+            cycle_denial = build_cycle_detected_denial(
+                batch_result,
+                spec_dict,
+                spec_full.dependencies,
+                resolve_language(lifecycle_config),
+            )
+            return _denied(ports, session, operation, op_payload, cycle_denial, user_id, lifecycle_config, validator_config)
+        if not batch_result.to_persist:
+            return _denied(ports, session, operation, op_payload, batch_deduped_denial(batch_result), user_id, lifecycle_config, validator_config)
+
+    # justify / unjustify — resolve the target entity + validate the scope/reason, producing
+    # the FULL merged fieldDeclarations map. The resolution threads into the projection, the
+    # SpecMutation, and the touched-entity set below.
+    justify_resolution: JustifyResolution | None = None
+    if operation in ("justify", "unjustify"):
+        jr = resolve_justify(
+            operation, op_payload or {}, spec_full, _na_reason_min_length(validator_config)
+        )
+        if isinstance(jr, Denied):
+            return _denied(ports, session, operation, op_payload, jr, user_id, lifecycle_config, validator_config)
+        justify_resolution = jr
 
     # 2. accept — project, score, gate, and assemble the success plan.
     return _accept(
@@ -210,6 +277,7 @@ def action_planning_session(
         user_id=user_id,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
+        justify_resolution=justify_resolution,
     )
 
 
@@ -279,8 +347,17 @@ def _accept(
     user_id: str | None,
     lifecycle_config: Mapping[str, Any],
     validator_config: Mapping[str, Any],
+    justify_resolution: JustifyResolution | None = None,
 ) -> VerbResult:
     _, _, clock = resolve_now(ports)
+
+    # justify/unjustify reuse the update_* mutation machinery: the resolution targets the
+    # entity and carries the merged fieldDeclarations, so the mutation is a SpecMutation SET
+    # on that entity. Effective phase + the audit op stay keyed on the original `operation`.
+    if justify_resolution is not None:
+        mutation_op, mutation_payload = _justify_mutation(justify_resolution)
+    else:
+        mutation_op, mutation_payload = operation, dict(op_payload or {})
 
     # The projection validates the mutated content against the typed records. Malformed
     # content (a wrong-shape array item, an off-enum value the proactive guards did not
@@ -288,12 +365,26 @@ def _accept(
     # opaque INTERNAL error — leaving the agent blind. Catch it and return a clean,
     # field-level denial so the agent can see exactly what to fix and re-send.
     try:
-        projected = ports.operations.apply_mutation(operation, op_payload or {}, spec_full)
+        projected = ports.operations.apply_mutation(mutation_op, mutation_payload, spec_full)
     except (PydanticValidationError, ValueError) as exc:
         return _denied(
             ports, session, operation, op_payload, _content_denial(exc),
             user_id, lifecycle_config, validator_config,
         )
+
+    # An ordering-only late update_ticket in cross_validation redirects to create_dependencies
+    # instead of rolling back (the consumed file exists; only the dependency edge is missing).
+    # Findings-conditioned over the projected post-update spec.
+    if operation == "update_ticket" and current_phase == PlanningPhase.CROSS_VALIDATION and is_late_op:
+        redirect = cross_val_file_redirect(
+            operation,
+            current_phase,
+            op_payload or {},
+            projected.spec.model_dump(by_alias=True, exclude_none=True),
+            validator_config,
+        )
+        if isinstance(redirect, Denied):
+            return _denied(ports, session, operation, op_payload, redirect, user_id, lifecycle_config, validator_config)
 
     op_def = get_operation_def(cast(PlanningOperationName, operation))
     native = op_def.native_phase if op_def is not None else None
@@ -301,9 +392,18 @@ def _accept(
         native if (is_late_op and isinstance(native, PlanningPhase)) else current_phase
     )
 
-    validator_output = ports.validator.validate(projected, effective_phase, validator_config)
+    language = resolve_language(lifecycle_config)
+    validator_output = ports.validator.validate(
+        projected, effective_phase, validator_config, language=language
+    )
 
-    touched = touched_entity_ids(op_payload, effective_phase, session.specification_id)
+    # justify/unjustify touch the resolved entity (its id == spec_id for a spec-justify), so the
+    # touched set comes from the resolution, not the op-name/phase-keyed helper.
+    touched = (
+        [justify_resolution.entity_id]
+        if justify_resolution is not None
+        else touched_entity_ids(op_payload, effective_phase, session.specification_id)
+    )
     gate = evaluate_phase_gate(
         current_phase=effective_phase,
         validator_output=validator_output,
@@ -329,7 +429,7 @@ def _accept(
     prev_session_status = cast(
         Literal["active", "awaiting_human_review"], session.status
     )
-    # M11.1 — a HUMAN edit on an awaiting session stays awaiting; otherwise active.
+    # A HUMAN edit on an awaiting session stays awaiting; otherwise active.
     post_session_status = (
         PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value
         if actor == ActorType.HUMAN
@@ -337,9 +437,17 @@ def _accept(
         else PlanningSessionStatus.ACTIVE.value
     )
 
+    # Variant precedence mirrors resolveVariant: a structural rollback wins; then an edit on an
+    # awaiting session (a HUMAN edit keeps it awaiting → handover; an AGENT edit on an awaiting
+    # session → feedback); otherwise the gate verdict.
+    _awaiting = PlanningSessionStatus.AWAITING_HUMAN_REVIEW.value
     variant = (
         GuidanceVariant.PHASE_ROLLBACK
         if rollback is not None
+        else GuidanceVariant.HUMAN_HANDOVER
+        if post_session_status == _awaiting
+        else GuidanceVariant.HUMAN_FEEDBACK
+        if prev_session_status == _awaiting
         else GuidanceVariant.GATE_PASSED
         if gate.gate_outcome == "pass"
         else GuidanceVariant.GATE_FAILED
@@ -382,8 +490,8 @@ def _accept(
     )
 
     mutation = resolve_aps_mutation(
-        operation,
-        op_payload,
+        mutation_op,
+        mutation_payload,
         spec_full,
         id_generator=ports.id_generator,
         clock=clock,

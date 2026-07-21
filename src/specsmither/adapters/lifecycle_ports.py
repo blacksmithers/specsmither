@@ -1,6 +1,6 @@
 """The coupled lifecycle-ports seam — concrete stores over the M0 SQLite layer.
 
-This is the COUPLED surface the planning lifecycle is wired through (A1 §5): the
+This is the COUPLED surface the planning lifecycle is wired through: the
 five :class:`~specsmither.lifecycle.ports.LifecyclePorts` slots, each a thin
 session-bound adapter over the M0 stores / crucible validator / in-memory
 projector / WritePlan executor, plus the :func:`make_lifecycle_ports` factory that
@@ -27,7 +27,7 @@ The :class:`~specsmither.lifecycle.operations_projector.ProjectorOperationsLayer
 (:class:`~specsmither.lifecycle.ports.OperationsLayer`) is DB-free and now lives with
 the pure lifecycle core; :func:`make_lifecycle_ports` binds an instance straight through.
 ``ConfigStoreSqlite`` (config seam) and ``CrucibleValidatorAdapter`` (crucible seam)
-are already built (work items #5/#7) and are bound straight through by the factory.
+are bound straight through by the factory.
 """
 
 from __future__ import annotations
@@ -39,7 +39,10 @@ from typing import TYPE_CHECKING, Any
 from crucible.models import Specification
 from sqlalchemy import select
 
-from specsmither.adapters.crucible_validator import CrucibleValidatorAdapter
+from specsmither.adapters.crucible_validator import (
+    CrucibleValidatorAdapter,
+    FileExistenceProber,
+)
 from specsmither.adapters.write_plan_executor import WritePlan, apply_write_plan
 from specsmither.db.base import new_ulid
 from specsmither.db.models import Epic as EpicRow
@@ -336,7 +339,7 @@ class SqliteSpecStore:
 
 
 # --------------------------------------------------------------------------- #
-# The factory (the COUPLED seam, A1 §5)                                         #
+# The factory (the COUPLED seam)                                                #
 # --------------------------------------------------------------------------- #
 
 
@@ -345,6 +348,8 @@ def make_lifecycle_ports(
     *,
     clock: Clock | None = None,
     id_generator: IdGenerator | None = None,
+    file_prober: FileExistenceProber | None = None,
+    default_language: str = "en",
 ) -> LifecyclePorts:
     """Bind the eight :class:`LifecyclePorts` slots over one live ``Session``.
 
@@ -354,6 +359,8 @@ def make_lifecycle_ports(
     in-transaction — the caller owns the surrounding ``Session.begin()`` / commit).
     ``clock`` defaults to UTC-now and ``id_generator`` to the monotonic ULID minter
     (the audit projector orders rows by ``id`` as a chronological cursor).
+    ``file_prober`` (when given) supplies the validator's grep evidence — the
+    real-repo ``existingFiles`` set the file-provenance check reads.
     """
 
     def _persist(plan: WritePlan) -> None:
@@ -363,11 +370,12 @@ def make_lifecycle_ports(
         planning_session_store=SqlitePlanningSessionStore(session),
         spec_store=SqliteSpecStore(session),
         config_store=ConfigStoreSqlite(session),
-        validator=CrucibleValidatorAdapter(),
+        validator=CrucibleValidatorAdapter(file_prober=file_prober),
         operations=ProjectorOperationsLayer(),
         persist_write_plan=_persist,
         clock=clock if clock is not None else _utc_now,
         id_generator=id_generator if id_generator is not None else new_ulid,
+        default_language=default_language,
     )
 
 

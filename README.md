@@ -111,6 +111,7 @@ workspaces/agents on one file safe).
 | `SPECSMITHER_DB` | Explicit DB file (overrides `HOME`) | `$SPECSMITHER_HOME/specsmither.db` |
 | `SPECSMITHER_PROJECT` | Force the active project id (overrides the workspace file) | the workspace `config.json` |
 | `SPECSMITHER_MCP_FORMAT` | MCP wire encoding (`toon` / `json`) | `toon` |
+| `SPECSMITHER_LANGUAGE` | Guidance language (`en` / `pt-br`; aliases `pt`, `pt_BR`) | `en` |
 
 Resolution precedence is **env > project (`.specsmither/config.json`) > global
 (`~/.specsmither/config.json`) > default**.

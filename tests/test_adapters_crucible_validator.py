@@ -295,3 +295,61 @@ def test_active_entity_id_threaded_into_crucible_context(
     assert ctx["activeEntityId"] is None
     assert ctx["phase"] == PlanningPhase.TICKET_DECOMPOSITION
     assert ctx["returns"] == ["structural", "scoring", "guidance"]
+
+
+# --------------------------------------------------------------------------- #
+# language is threaded into crucible's context (guidance i18n seam)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_language_defaults_to_en_and_threads_into_crucible_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_validate = crucible.validate
+    captured: dict[str, Any] = {}
+
+    def _spy(spec_dict: Any, context: Any) -> Any:
+        captured["language"] = context.get("language")
+        return real_validate(spec_dict, context)
+
+    monkeypatch.setattr(adapter_module, "crucible_validate", _spy)
+
+    # Default: no language argument → the canonical "en".
+    CrucibleValidatorAdapter().validate(_spec_full(), PlanningPhase.EPIC_EXPANSION, _config())
+    assert captured["language"] == "en"
+
+    # Explicit request forwards verbatim to the engine.
+    CrucibleValidatorAdapter().validate(
+        _spec_full(), PlanningPhase.EPIC_EXPANSION, _config(), language="pt-br"
+    )
+    assert captured["language"] == "pt-br"
+
+
+def test_existing_files_surfaced_from_the_prober_else_none() -> None:
+    # No prober → strict spec-internal existence → existing_files is None.
+    out = CrucibleValidatorAdapter().validate(
+        _spec_full(), PlanningPhase.CROSS_VALIDATION, _config()
+    )
+    assert out.existing_files is None
+
+    # A prober → the probed subset is surfaced verbatim as the grep evidence the gate used.
+    probed = ["src/base.py"]
+    adapter = CrucibleValidatorAdapter(file_prober=lambda candidates: probed)
+    out2 = adapter.validate(_spec_full(), PlanningPhase.CROSS_VALIDATION, _config())
+    assert out2.existing_files == frozenset(probed)
+
+
+def test_pt_br_language_translates_crucible_guidance_findings() -> None:
+    adapter = CrucibleValidatorAdapter()
+    en = adapter.validate(_spec_full(), PlanningPhase.EPIC_EXPANSION, _config())
+    pt = adapter.validate(
+        _spec_full(), PlanningPhase.EPIC_EXPANSION, _config(), language="pt-br"
+    )
+
+    en_messages = [f.message for f in en.findings]
+    pt_messages = [f.message for f in pt.findings]
+    # Scores/categories are canonical (unchanged); only the guidance PROSE differs.
+    assert en.local_score == pt.local_score
+    assert [f.category for f in en.findings] == [f.category for f in pt.findings]
+    # At least one guidance finding's prose is actually translated.
+    assert en_messages != pt_messages

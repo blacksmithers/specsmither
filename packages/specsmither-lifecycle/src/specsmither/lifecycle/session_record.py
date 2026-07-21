@@ -14,7 +14,7 @@ verb (``specsmither.adapters.lifecycle_ports``); the WritePlan persist path is
 unaffected because every ``sessionUpdate`` carries plain field dicts, not this
 record.
 
-Field parity: every attribute the pure surface reads (``compose``, the CPS gate,
+Field alignment: every attribute the pure surface reads (``compose``, the CPS gate,
 ``inspect``, ``get_planning_status``) OR constructs (``start`` /
 ``echo_session`` / ``post_state_view``) is present here with the same name the ORM
 column uses, so the ORM→record mapping is a straight attribute copy. ``id`` /
@@ -37,8 +37,8 @@ class PlanningSessionRecord:
 
     Mirrors :class:`~specsmither.db.models.planning.PlanningSession` field-for-field
     for everything the pure lifecycle surface touches. Statuses / phases / triggers
-    are the verbatim ``StrEnum`` ``.value`` strings (the same loose ``str`` the ORM
-    stores), so the record round-trips with the TS/JSON wire exactly as the row did.
+    are the exact ``StrEnum`` ``.value`` strings (the same loose ``str`` the ORM
+    stores), so the record round-trips with the JSON wire exactly as the row did.
 
     ``last_validator_output`` is the persisted gate-output blob (shape varies →
     :data:`~typing.Any`); ``inspect`` rehydrates it for display only. The JSON
@@ -63,7 +63,7 @@ class PlanningSessionRecord:
     last_score: float | None = None
     actions_count: int = 0
 
-    # M6.6 resume model: {content, recordedAt, recordedByUserId} | None.
+    # Resume model: {content, recordedAt, recordedByUserId} | None.
     pending_human_feedback: dict[str, Any] | None = None
 
     # Latest transition / read / validation bookkeeping.

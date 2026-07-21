@@ -1,10 +1,10 @@
 """Core entity ORM models: the Specification → Epic → Ticket spine + git + spec-type.
 
-A faithful port of the SpecForge persistence schema (architecture §3), corrected
-for SpecSmither: cloud-only fields are dropped (``contentS3Key``, the ``projectId``
-denorm on child rows, S3 / GSI / auth / readiness-AI fields, the ``review_*``
-tables). Blueprint bodies are stored *inline* (``content``). The denormalized count
-columns are kept (declared here, written later by the recompute worklist).
+The SpecSmither persistence schema (architecture §3): local-first, so cloud-only
+fields have no place here (there is no ``contentS3Key``, no ``projectId`` denorm on
+child rows, no S3 / GSI / auth / readiness-AI fields, no ``review_*`` tables).
+Blueprint bodies are stored *inline* (``content``). The denormalized count columns
+are kept (declared here, written later by the recompute worklist).
 
 Status / enum-valued columns are plain ``String`` columns typed ``Mapped[str]`` and
 default to the corresponding enum's ``.value`` — statuses are unconstrained strings
@@ -47,8 +47,8 @@ __all__ = [
 class Project(IdMixin, TimestampMixin, Base):
     """Root container. Owns specifications; carries denormalized rollup counts.
 
-    Per recon A5, project ``progress`` is *not* persisted (the webapp derives it
-    read-side) — so there is deliberately no ``progress`` column here.
+    Project ``progress`` is *not* persisted (it is derived read-side) — so there is
+    deliberately no ``progress`` column here.
     """
 
     __tablename__ = "projects"

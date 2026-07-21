@@ -37,12 +37,33 @@ PROJECT_ID = "01PROJECT0000000000000000A"
 FIXED_CLOCK = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 
 
+def _materialize_brownfield(root: Path) -> None:
+    """Write the brownfield files the seed's tickets consume but do not create.
+
+    The validator's file-provenance check reads the workspace tree for grep evidence;
+    the Observatory roots its prober at the workspace, so the seed's modified/referenced
+    paths must exist there for the planning loop to clear cross_validation.
+    """
+    created: set[str] = set()
+    consumed: set[str] = set()
+    for epic in SEED["epics"]:
+        for ticket in epic["tickets"]:
+            created.update(ticket.get("filesToBeCreated", []) or [])
+            for key in ("filesToBeModified", "filesToBeReferenced", "filesToBeDeleted"):
+                consumed.update(ticket.get(key, []) or [])
+    for rel in sorted(consumed - created):
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("", encoding="utf-8")
+
+
 def tui_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
     """An isolated user-global home + a workspace dir under ``tmp_path``."""
     home = tmp_path / "home"
     workspace = tmp_path / "ws"
     home.mkdir(parents=True, exist_ok=True)
     workspace.mkdir(parents=True, exist_ok=True)
+    _materialize_brownfield(workspace)
     env = {"SPECSMITHER_DB": str(home / "specsmither.db"), "SPECSMITHER_HOME": str(home)}
     return env, workspace
 

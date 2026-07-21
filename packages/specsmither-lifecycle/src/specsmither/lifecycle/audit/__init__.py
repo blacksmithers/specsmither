@@ -1,4 +1,4 @@
-"""Audit row builders (work item #17) — ported from ``planning/audit/*``.
+"""Audit row builders.
 
 The **pure** factories that turn a verb's decision into the append-only audit row
 payloads the M0 executor commits:

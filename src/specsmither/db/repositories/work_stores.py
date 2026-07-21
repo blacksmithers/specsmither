@@ -1,9 +1,9 @@
 """SQLite repositories for the five work-session tables (work-lifecycle CRUD).
 
-These are the ``*StoreSqlite`` implementations of the ``session-types`` work-session
-store interfaces — :class:`IWorkSessionStore` plus the four gate-dimension child
-stores (acceptance checks, implementation-step completions, file changes, test
-results). Only the **CRUD surface + the per-ticket lock** are M0; the work *verbs*
+These are the ``*StoreSqlite`` work-session store implementations — the work-session
+store plus the four gate-dimension child stores (acceptance checks,
+implementation-step completions, file changes, test results). Only the **CRUD
+surface + the per-ticket lock** are M0; the work *verbs*
 (gate evaluation, completion, expected-vs-actual reconciliation) land in release
 0.2.0. So these stores are deliberately thin: they read and write rows and translate
 constraint violations, nothing more.

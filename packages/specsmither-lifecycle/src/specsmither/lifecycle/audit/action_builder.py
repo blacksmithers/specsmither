@@ -1,4 +1,4 @@
-"""Audit-action row builder (``audit/action-builder.ts``).
+"""Audit-action row builder.
 
 A **pure** factory for the ``planning_session_actions`` row payload that an L4 verb
 wraps in an :class:`~specsmither.adapters.write_plan_executor.ActionAppend` WritePlan
@@ -10,8 +10,8 @@ What the M0 schema makes dedicated columns vs. the catch-all
 The M0 ``PlanningSessionAction`` model keeps only a handful of dedicated columns
 (``operation`` / ``phase`` / ``outcome`` / ``actor`` / ``guidance_variant`` /
 ``findings_categories`` / ``score``) plus the catch-all ``payload`` JSON. Everything
-else the TS stamped as a distinct action field — the op ``payload`` itself, the
-derived ``entity_type`` / ``entity_id`` / ``fields_changed``, and
+else — the op ``payload`` itself, the derived ``entity_type`` / ``entity_id`` /
+``fields_changed``, and
 ``deny_reason`` / ``deny_details`` / ``per_entity_scores_after`` /
 ``human_instruction`` / ``target_action_id`` / ``performed_by_user_id`` — is merged
 **flat** into ``payload`` so the M0 aggregate fold can read both the op-payload keys
@@ -26,17 +26,16 @@ The two stream-fold sources (the CRITICAL contract)
 folds read — they are stamped here at construction, never re-derived downstream. Omit
 them and those aggregates come out empty.
 
-SpecSmither divergence from the TS
-----------------------------------
+Where the categories come from
+------------------------------
 
-The TS ``buildAction`` took a composed ``ProcessGuidance`` and read its ``variant`` +
-its ``findings.grouped[].category`` set. L3 runs *before* the L4 guidance composer, so
-SpecSmither instead takes the ``guidance_variant`` the caller already chose and derives
-``findings_categories`` directly from ``validator_output.findings`` (the distinct,
-order-preserving category set). ``score`` is ``validator_output.local_score`` (the TS
-``scoreAfter``). When no ``validator_output`` is supplied (synthetic ops such as
-``phase_advance`` / a pre-validation denial) both ``score`` and ``findings_categories``
-are omitted.
+L3 runs *before* the L4 guidance composer, so this builder takes the
+``guidance_variant`` the caller already chose and derives ``findings_categories``
+directly from ``validator_output.findings`` (the distinct, order-preserving category
+set), rather than reading a composed guidance's grouped blocks. ``score`` is
+``validator_output.local_score``. When no ``validator_output`` is supplied (synthetic
+ops such as ``phase_advance`` / a pre-validation denial) both ``score`` and
+``findings_categories`` are omitted.
 """
 
 from __future__ import annotations
@@ -54,7 +53,7 @@ __all__ = [
 ]
 
 
-#: Operation → audited ``entity_type`` (``entityTypeMap``, action-builder.ts:90-97).
+#: Operation → audited ``entity_type``.
 _ENTITY_TYPE_BY_OP: dict[str, str] = {
     "update_spec": "spec",
     "create_epic": "epic",
@@ -87,9 +86,9 @@ def _now(clock: Clock | None) -> str:
 
 
 def _extract_entity_fields(operation: str, payload: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Derive ``entity_type`` / ``entity_id`` / ``fields_changed`` (``extractEntityFields``).
+    """Derive ``entity_type`` / ``entity_id`` / ``fields_changed`` from the payload.
 
-    Faithful to the TS: ``entity_type`` from the op map; ``entity_id`` from
+    ``entity_type`` from the op map; ``entity_id`` from
     ``payload.id`` (update/delete) falling back to the blueprint id (``blueprint_id``
     / ``blueprintId`` for the link/unlink ops); ``fields_changed`` from the keys of
     ``payload.fields``. Any absent piece is simply omitted.
@@ -127,9 +126,9 @@ def _extract_entity_fields(operation: str, payload: Mapping[str, Any] | None) ->
 def _distinct_finding_categories(validator_output: ValidatorOutput) -> list[str]:
     """Order-preserving distinct ``category`` set of the validator findings.
 
-    The SpecSmither analogue of the TS ``extractFindingsCategories`` — but read off
-    ``validator_output.findings`` (each finding's ``category``) rather than a composed
-    guidance's grouped blocks. Each category is coerced to its plain string value.
+    Read off ``validator_output.findings`` (each finding's ``category``) rather than a
+    composed guidance's grouped blocks. Each category is coerced to its plain string
+    value.
     """
 
     seen: set[str] = set()

@@ -1,10 +1,9 @@
-# Phase: cross_validation — Full content per guidance-catalog-v2.md §2.6
-# Built by `pnpm catalogs:build` → src/planning/lifecycle-planning-guidance/generated/phases/cross-validation.ts
+# Phase: cross_validation — full agent-facing guidance content.
 # Relational enrichment — NOT corrective. Terminal phase.
 
 phaseHumanName: "Cross-Validation"
 phaseIndex: 6
-phaseGoal: "Relational enrichment — declare which blueprints cover which tickets, declare ticket-to-ticket dependencies. Then CPS triggers terminal handover after validating 13 cross-checks."
+phaseGoal: "Relational enrichment — declare which blueprints cover which tickets, declare ticket-to-ticket dependencies. Then CPS triggers terminal handover after validating the 10 cross-validation checks."
 phaseCharacter: "relational + terminal. Native ops: link_blueprint_to_tickets, unlink_blueprint_to_tickets, create_dependencies, delete_dependencies."
 
 fields:
@@ -21,10 +20,9 @@ fields:
   - field: ticket.dependencies[]
     required: false
     naEligible: true
-    # ME.15.5 (fixes A5/I4) — the native op here is `create_dependencies`, which writes
-    # `requires` edges only (fromTicketId depends on toTicketId). Advertising `blocks`
-    # was a mismatch: the schema has no `type` param, so `blocks` was inexpressible and
-    # silently coerced to `requires`. To express a "blocks" relationship, reverse the edge.
+    # The native op here is `create_dependencies`, which writes `requires` edges only
+    # (fromTicketId depends on toTicketId). There is no `blocks` param — the schema has no
+    # `type` field. To express a "blocks" relationship, reverse the edge.
     shape: "array of {fromTicketId, toTicketId} — a `requires` edge (fromTicketId depends on toTicketId), added via create_dependencies"
     description: "Refinement of dependency declarations from Phase 4. Add edges visible only when full ticket set exists."
     interview_hooks:
@@ -34,7 +32,7 @@ fields:
     examples: []
 
 coverage_invariant: |
-  13 cross-checks (CPS gate criteria — not agent's day-to-day work):
+  10 cross-checks run in this phase (CPS gate criteria — not agent's day-to-day work):
 
   Dependency graph:
     - circular-dependency
@@ -46,19 +44,19 @@ coverage_invariant: |
     - topology-leaves-exceed
   Wave coordination:
     - wave-size-exceed
-    - wave-concurrent-modification
-    - wave-deletion-after-modification
-    - wave-deletion-after-creation
+  Concurrency:
+    - concurrent-modification
   File coordination:
     - file-conflict
-    - files-to-be-referenced
-  Blueprint coverage:
-    - blueprint-coverage
+    - file-provenance
 
-  NA mechanism: for `orphan-reference` (unjustified root) and `island-ticket` — justify via ticket.fieldDeclarations.dependencies.
+  Blueprint coverage is gated earlier (in ticket_decomposition) — it is no longer a
+  cross-validation check, though blueprints are still linked to tickets here.
+
+  NA mechanism: for `orphan-reference` (unjustified root) and `island-ticket` — declare the ticket's `dependencies` scope N/A with the `justify` op.
   `broken-reference` is NEVER NA-eligible — always an error (create the missing ticket or remove the reference).
 
-handover_summary: "Cross-validation passed: zero findings across 13 cross-checks + zero duplicate-order findings. Spec is fully coherent. **Terminal handover** — approval here closes the spec to status `ready`; feedback loops back."
+handover_summary: "Cross-validation passed: zero findings across the 10 cross-checks + zero duplicate-order findings. Spec is fully coherent. **Terminal handover** — approval here closes the spec to status `ready`; feedback loops back."
 
 feedback_likely_areas: "blueprint coverage per ticket (link_blueprint_to_tickets), declared dependencies (create_dependencies / delete_dependencies), or unresolved cross-check findings"
 
@@ -69,19 +67,19 @@ post_approval_actions:
   - "Spec enters work lifecycle (out of v0.1.0 scope)"
 
 gate_failed_body: |
-  Your role: walk every ticket and declare its **blueprint coverage** + **dependencies**. Then call `complete_planning_session` to validate the relational set against the 13 cross-checks.
+  Your role: walk every ticket and declare its **blueprint coverage** + **dependencies**. Then call `complete_planning_session` to validate the relational set against the 10 cross-checks.
 
   **Native operations here:**
   - link_blueprint_to_tickets / unlink_blueprint_to_tickets
-  - create_dependencies / delete_dependencies (bulk up to 100)
+  - create_dependencies / delete_dependencies (bulk up to 5000 edges per call)
 
   **Approach:**
   1. **Per ticket, ask:** which blueprints describe artifacts this ticket needs to follow? Link them with `link_blueprint_to_tickets`. Poll `get_planning_status` for the **blueprint-coverage scoreboard** — it flags every blueprint still below the minimum link count, how many more tickets each needs, and the real blueprintId/ticketId roster to address. Link those ids directly; never probe with placeholder ids.
   2. **Per ticket, ask:** which other tickets must be done first? Declare dependencies with `create_dependencies` — each edge is a `requires` edge (fromTicketId depends on toTicketId). To express "this ticket blocks that one", reverse the edge.
-  3. **Justify intentional dependency gaps** via `fieldDeclarations.dependencies = { value: 'N/A', reason: '<≥20 chars>' }` (foundational/standalone). NOT for `broken-reference` — that always errors.
+  3. **Justify intentional dependency gaps** with the `justify` op (scope `dependencies`, reason `<≥20 chars>`) for foundational/standalone tickets. NOT for `broken-reference` — that always errors.
   4. **When relational ambiguity needs the human's call**, complete the phase (`complete_planning_session`) and raise the question in your handover — the human resolves it on review.
-  5. **Avoid body changes here.** An `update_ticket`/`update_epic`/`update_spec` that changes body fields rolls back to its native phase. Allowed here: relational ops (dependencies, blueprint links) and `fieldDeclarations`-only N/A declarations (exempt from rollback).
+  5. **Avoid body changes here.** An `update_ticket`/`update_epic`/`update_spec` that changes body fields rolls back to its native phase. Allowed here: relational ops (dependencies, blueprint links) and `justify`/`unjustify` N/A declarations (native to every phase, never a rollback).
 
-  **CPS gate criteria** — the 13 cross-checks must pass before terminal handover.
+  **CPS gate criteria** — the 10 cross-checks must pass before terminal handover.
 
   **Terminal:** human approval after CPS here closes the spec to `ready`. There is no Phase 7.

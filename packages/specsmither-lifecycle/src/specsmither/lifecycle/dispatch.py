@@ -1,15 +1,16 @@
-"""The lifecycle dispatch facade (work item #10) — ported from ``index.ts`` (A1 §0).
+"""The lifecycle dispatch facade.
 
-:func:`create_lifecycle` mirrors the TS ``createLifecycle(ports)``: it returns a
+:func:`create_lifecycle` returns a
 :class:`Lifecycle` whose :meth:`Lifecycle.handle` does exactly two things — route the
 event to its (pure) verb, then, if the verb built a :class:`WritePlan` and a
 ``persist_write_plan`` port is wired, persist it. Both happen inside the caller's
 single transaction (the verb's reads + the plan's writes share one ``Session`` →
 one ``BEGIN IMMEDIATE``).
 
-The four agent-facing verbs (``start`` / ``action`` / ``complete`` / ``inspect``) are
-the dispatch union; the three handover verbs are deliberately NOT here (they are
-webapp/CLI-called entrypoints built separately, mirroring the TS design where
+The three agent-facing verbs (``start`` / ``action`` / ``complete``) are the dispatch
+union — the read-only status poll is the ``get_planning_status`` operation of ``action``,
+not a separate verb; the three handover verbs are deliberately NOT here (they are
+webapp/CLI-called entrypoints built separately, where
 ``approveHandover`` / ``rejectHandover*`` are not part of ``handle``).
 
 This module is PURE (no sqlalchemy): it dispatches to the verbs and persists via the
@@ -25,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from specsmither.lifecycle.verbs.action import action_planning_session
 from specsmither.lifecycle.verbs.complete import complete_planning_session
-from specsmither.lifecycle.verbs.inspect import inspect_planning_session
 from specsmither.lifecycle.verbs.start import start_planning_session
 from specsmither.lifecycle.verbs.support import VerbResult
 
@@ -42,17 +42,18 @@ __all__ = [
     "create_lifecycle",
 ]
 
-#: The four agent-facing verb names the dispatch union routes.
-VerbName = Literal["start", "action", "complete", "inspect"]
+#: The three agent-facing verb names the dispatch union routes.
+VerbName = Literal["start", "action", "complete"]
 
 
 @dataclass(frozen=True)
 class LifecycleEvent:
-    """A dispatchable lifecycle event: ``{verb, payload}`` (the TS ``PlanningLifecycleEvent``).
+    """A dispatchable lifecycle event: ``{verb, payload}``.
 
     ``verb`` selects the agent-facing verb; ``payload`` is that verb's wire payload
     (``{specId,…}`` for ``start``; ``{sessionId, operation, payload?, actor?,…}`` for
-    ``action``; ``{sessionId,…}`` for ``complete`` / ``inspect``).
+    ``action``; ``{sessionId,…}`` for ``complete``). The read-only status poll is the
+    ``get_planning_status`` operation of ``action``, not a separate verb.
     """
 
     verb: VerbName
@@ -60,7 +61,7 @@ class LifecycleEvent:
 
 
 class Lifecycle:
-    """The dispatch object ``create_lifecycle`` returns (the TS ``Lifecycle``).
+    """The dispatch object ``create_lifecycle`` returns.
 
     Holds the bound :class:`LifecyclePorts`; :meth:`handle` routes + persists.
     """
@@ -95,6 +96,4 @@ def _dispatch(event: LifecycleEvent, ports: LifecyclePorts) -> VerbResult:
         return action_planning_session(event.payload, ports)
     if event.verb == "complete":
         return complete_planning_session(event.payload, ports)
-    if event.verb == "inspect":
-        return inspect_planning_session(event.payload, ports)
     raise ValueError(f"Unknown lifecycle verb: {event.verb!r}")

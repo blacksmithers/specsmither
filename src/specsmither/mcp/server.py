@@ -1,7 +1,6 @@
-"""The L6 async MCP stdio server (work item #15) — the adapter over the sync engine.
+"""The L6 async MCP stdio server — the adapter over the sync engine.
 
-A faithful port of ``packages/cli/src/server.ts`` (the tool definitions + the thin async
-``dispatchToolCall`` wrapper), re-pointed at the SpecSmither
+The tool definitions plus a thin async dispatch wrapper over the SpecSmither
 :class:`~specsmither.dispatch.facade.Dispatcher`. The engine is **synchronous**; this is
 the single async layer in the system, so it owns exactly two responsibilities:
 
@@ -18,7 +17,7 @@ whatever ``dispatch`` returns. The sync ``dispatch`` runs on a worker thread
 (:func:`anyio.to_thread.run_sync`) so the event loop is never blocked by SQLite I/O.
 
 The wire encoding follows ``output_format`` (:func:`encode_mcp`) — TOON by default, JSON
-optional — mirroring the TS ``mcpOutputFormat`` resolution.
+optional.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ from mcp.server.stdio import stdio_server
 from specsmither.db.base import make_session_factory
 from specsmither.db.migrations import init_db
 from specsmither.dispatch.facade import HANDOVER_TOOL_NAMES, TOOL_NAMES, make_dispatcher
-from specsmither.operations.workspace import resolve_db_path
+from specsmither.operations.workspace import resolve_db_path, resolve_workspace_root
 from specsmither.toon import encode as toon_encode
 
 if TYPE_CHECKING:
@@ -56,7 +55,7 @@ __all__ = [
     "serve_stdio",
 ]
 
-#: The MCP server name advertised on the wire (the TS ``name: 'specforge'`` analogue).
+#: The MCP server name advertised on the wire.
 SERVER_NAME = "specsmither"
 
 #: Wire-format env override for :func:`main`. The DB path is resolved user-global
@@ -74,9 +73,8 @@ def encode_mcp(value: Any, fmt: str = "toon") -> str:
     """Encode an MCP result ``value`` for the wire per ``fmt`` (TOON default, JSON opt-in).
 
     ``fmt == 'json'`` emits ``json.dumps(value, ensure_ascii=False)``; anything else
-    (the default ``'toon'``) routes through :func:`specsmither.toon.encode`. Mirrors the
-    TS ``encodeMcp`` — a faithful, lossless rendering of the JSON-able content the façade
-    returns.
+    (the default ``'toon'``) routes through :func:`specsmither.toon.encode` — a lossless
+    rendering of the JSON-able content the façade returns.
     """
     if fmt == "json":
         return json.dumps(value, ensure_ascii=False)
@@ -94,6 +92,129 @@ _RESPONSE_DETAIL: dict[str, Any] = {
     "enum": ["minimal", "standard", "full"],
     "description": "Response verbosity tier (default 'standard').",
 }
+
+# The per-operation payload shapes advertised on ``action_planning_session`` — one
+# ``oneOf`` branch per planning operation, discriminated by ``operation``. These are the
+# PUBLIC contract; ``check_planning_catalog_parity`` (a test) asserts they match the
+# lifecycle deny-gate, so the catalog can never advertise a payload the gate would reject.
+_STR: dict[str, str] = {"type": "string"}
+_STR_ARRAY: dict[str, Any] = {"type": "array", "items": _STR}
+_PLANNING_OP_PAYLOADS: dict[str, dict[str, Any]] = {
+    "update_spec": {"properties": {"fields": {"type": "object"}}, "required": ["fields"]},
+    "create_epic": {
+        "properties": {"title": _STR, "description": _STR},
+        "required": ["title"],
+    },
+    "update_epic": {
+        "properties": {"id": _STR, "fields": {"type": "object"}},
+        "required": ["id", "fields"],
+    },
+    "delete_epic": {
+        "properties": {"id": _STR, "cascadeRemoveDependencies": {"type": "boolean"}},
+        "required": ["id"],
+    },
+    "create_ticket": {
+        "properties": {
+            "epicId": _STR,
+            "title": _STR,
+            "description": _STR,
+            "ticketType": {"type": "string", "enum": ["implementation", "verification"]},
+        },
+        "required": ["epicId", "title"],
+    },
+    "update_ticket": {
+        "properties": {"id": _STR, "fields": {"type": "object"}},
+        "required": ["id", "fields"],
+    },
+    "delete_ticket": {
+        "properties": {"id": _STR, "cascadeRemoveDependencies": {"type": "boolean"}},
+        "required": ["id"],
+    },
+    "create_blueprint": {
+        "properties": {"title": _STR, "category": _STR},
+        "required": ["title", "category"],
+    },
+    "update_blueprint": {
+        "properties": {"id": _STR, "fields": {"type": "object"}},
+        "required": ["id", "fields"],
+    },
+    "delete_blueprint": {"properties": {"id": _STR}, "required": ["id"]},
+    "link_blueprint_to_tickets": {
+        "properties": {"blueprintId": _STR, "ticketIds": _STR_ARRAY},
+        "required": ["blueprintId", "ticketIds"],
+    },
+    "unlink_blueprint_to_tickets": {
+        "properties": {"blueprintId": _STR, "ticketIds": _STR_ARRAY},
+        "required": ["blueprintId", "ticketIds"],
+    },
+    "create_dependencies": {
+        "properties": {
+            "dependencies": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"fromTicketId": _STR, "toTicketId": _STR},
+                    "required": ["fromTicketId", "toTicketId"],
+                },
+            }
+        },
+        "required": ["dependencies"],
+    },
+    "delete_dependencies": {
+        "properties": {"dependencyIds": _STR_ARRAY},
+        "required": ["dependencyIds"],
+    },
+    "justify": {
+        "properties": {"entityId": _STR, "scope": _STR, "reason": _STR},
+        "required": ["scope", "entityId", "reason"],
+    },
+    "unjustify": {
+        "properties": {"entityId": _STR, "scope": _STR},
+        "required": ["scope", "entityId"],
+    },
+    "get_planning_status": {"properties": {}, "required": []},
+}
+
+
+def _planning_op_branch(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """One ``action_planning_session.oneOf`` branch: fix ``operation`` + its payload shape."""
+    return {
+        "properties": {
+            "operation": {"const": operation},
+            "payload": {"type": "object", **payload},
+        },
+        "required": ["operation"],
+    }
+
+
+def _action_planning_tool() -> types.Tool:
+    """``action_planning_session`` — a per-operation ``oneOf`` catalog over the 15 ops."""
+    return types.Tool(
+        name="action_planning_session",
+        description=(
+            "Apply a planning operation (create/update epics, tickets, dependencies, ...) "
+            "to an active planning session. The payload shape depends on operation — see oneOf."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "sessionId": {"type": "string", "description": "Active planning session id."},
+                "operation": {
+                    "type": "string",
+                    "enum": list(_PLANNING_OP_PAYLOADS),
+                    "description": "The planning operation name.",
+                },
+                "payload": {"type": "object", "description": "Operation arguments."},
+                "actor": {"type": "string", "description": "Optional acting identity."},
+                "responseDetail": _RESPONSE_DETAIL,
+            },
+            "required": ["sessionId", "operation"],
+            "oneOf": [
+                _planning_op_branch(op, payload)
+                for op, payload in _PLANNING_OP_PAYLOADS.items()
+            ],
+        },
+    )
 
 
 def _tool(
@@ -122,19 +243,7 @@ _DEFS: dict[str, types.Tool] = {
             {"specId": {"type": "string", "description": "Specification id to plan."}},
             required=("specId",),
         ),
-        _tool(
-            "action_planning_session",
-            "Apply a planning operation (create/update epics, tickets, dependencies, ...) "
-            "to an active planning session.",
-            {
-                "sessionId": {"type": "string", "description": "Active planning session id."},
-                "operation": {"type": "string", "description": "The planning operation name."},
-                "payload": {"type": "object", "description": "Operation arguments."},
-                "actor": {"type": "string", "description": "Optional acting identity."},
-                "responseDetail": _RESPONSE_DETAIL,
-            },
-            required=("sessionId", "operation"),
-        ),
+        _action_planning_tool(),
         _tool(
             "complete_planning_session",
             "Complete an active planning session and request handover review.",
@@ -334,6 +443,7 @@ def build_server(
     *,
     output_format: str = "toon",
     clock: Callable[[], datetime] | datetime | None = None,
+    project_root: Path | None = None,
 ) -> Server:
     """Build the ``specsmither`` MCP :class:`~mcp.server.Server` over ``session_factory``.
 
@@ -341,8 +451,11 @@ def build_server(
     sync :meth:`Dispatcher.dispatch` (on a worker thread, so the loop is not blocked) and
     TOON/JSON-encodes the JSON-able content it returns per ``output_format``. The façade
     never raises, so the handler has no error branch — a domain error is already content.
+
+    ``project_root`` (the workspace working tree) wires the validator's grep evidence —
+    the file-provenance check reads which spec-declared paths already exist on disk.
     """
-    dispatcher = make_dispatcher(session_factory, clock=clock)
+    dispatcher = make_dispatcher(session_factory, clock=clock, project_root=project_root)
     server: Server = Server(SERVER_NAME)
 
     # The MCP SDK's registration decorators carry no return annotation, so under
@@ -368,15 +481,23 @@ def build_server(
 # --------------------------------------------------------------------------------------
 
 
-async def serve_stdio(db_path: str | Path, *, output_format: str = "toon") -> None:
+async def serve_stdio(
+    db_path: str | Path,
+    *,
+    output_format: str = "toon",
+    project_root: Path | None = None,
+) -> None:
     """Run the MCP server over stdio against the SQLite database at ``db_path``.
 
     Bootstraps the database (:func:`~specsmither.db.migrations.init_db`), builds a session
-    factory + server, and serves until the stdio streams close.
+    factory + server, and serves until the stdio streams close. ``project_root`` is the
+    workspace working tree used for the validator's grep evidence.
     """
     engine = init_db(db_path)
     session_factory = make_session_factory(engine)
-    server = build_server(session_factory, output_format=output_format)
+    server = build_server(
+        session_factory, output_format=output_format, project_root=project_root
+    )
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
@@ -392,4 +513,9 @@ def main() -> None:
     """
     db_path: str | Path = sys.argv[1] if len(sys.argv) > 1 else resolve_db_path()
     output_format = os.environ.get(_FORMAT_ENV, "toon")
-    anyio.run(functools.partial(serve_stdio, db_path, output_format=output_format))
+    project_root = resolve_workspace_root()
+    anyio.run(
+        functools.partial(
+            serve_stdio, db_path, output_format=output_format, project_root=project_root
+        )
+    )

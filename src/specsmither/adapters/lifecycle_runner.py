@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session, sessionmaker
 
+    from specsmither.adapters.crucible_validator import FileExistenceProber
     from specsmither.lifecycle.dispatch import LifecycleEvent
     from specsmither.lifecycle.guidance.types import PlanningAgentResponse
     from specsmither.lifecycle.ports import Clock, IdGenerator, LifecyclePorts, Validator
@@ -47,6 +48,8 @@ def run_verb(
     clock: Clock | None = None,
     id_generator: IdGenerator | None = None,
     validator: Validator | None = None,
+    file_prober: FileExistenceProber | None = None,
+    default_language: str = "en",
 ) -> PlanningAgentResponse:
     """Open one transaction, bind the ports, and run ``event`` end-to-end.
 
@@ -58,10 +61,17 @@ def run_verb(
     WritePlan persist, and the in-transaction recompute all commit (or roll back)
     atomically. ``clock`` / ``id_generator`` are injectable for determinism;
     ``validator`` (when given) replaces the crucible adapter — the test seam for driving
-    the gate deterministically.
+    the gate deterministically. ``file_prober`` supplies the validator's grep evidence
+    (ignored when ``validator`` is overridden).
     """
     with session_factory.begin() as session:
-        ports = make_lifecycle_ports(session, clock=clock, id_generator=id_generator)
+        ports = make_lifecycle_ports(
+            session,
+            clock=clock,
+            id_generator=id_generator,
+            file_prober=file_prober,
+            default_language=default_language,
+        )
         if validator is not None:
             ports = replace(ports, validator=validator)
         return create_lifecycle(ports).handle(event)
@@ -74,6 +84,7 @@ def run_handover(
     *,
     clock: Clock | None = None,
     id_generator: IdGenerator | None = None,
+    file_prober: FileExistenceProber | None = None,
 ) -> HandoverOutcome:
     """Open a transaction, run ``verb(payload, ports)``, persist its plan, return the outcome.
 
@@ -87,7 +98,9 @@ def run_handover(
     """
 
     with session_factory.begin() as session:
-        ports = make_lifecycle_ports(session, clock=clock, id_generator=id_generator)
+        ports = make_lifecycle_ports(
+            session, clock=clock, id_generator=id_generator, file_prober=file_prober
+        )
         outcome = verb(payload, ports)
         if isinstance(outcome, HandoverResult) and ports.persist_write_plan is not None:
             ports.persist_write_plan(outcome.write_plan)

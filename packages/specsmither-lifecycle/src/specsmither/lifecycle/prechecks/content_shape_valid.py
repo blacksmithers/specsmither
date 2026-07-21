@@ -1,4 +1,4 @@
-"""Pre-check: does the content the write will persist read back cleanly? (MB.1 family)
+"""Pre-check: does the content the write will persist read back cleanly?
 
 The write-boundary safety net. Spec/epic/ticket content is persisted as JSON (or decomposed
 into child tables) and read back through the crucible-backed domain records
@@ -13,8 +13,10 @@ spec/epic) and tolerating the id/order the decompose stamps for ticket child arr
 with the exact field errors, so no un-readable content is ever persisted. Because it drives off
 each record's own field annotations it covers EVERY directly-mapped field (goals, scope,
 epicTargets, apiContracts, codeReferences, …) with no per-field allow-list to drift, and it can
-never be stricter than the read. The only field the read transforms out of a record shape is the
-ticket ``testSpecification.testTypes`` group, handled explicitly. It subsumes the proactive
+never be stricter than the read. The ticket child arrays the ``update_ticket`` decompose splits
+into child rows are read back through those rows (which accept a bare string as the item text),
+not through the raw record annotation, so they are exempt from the raw-shape check here
+(``testSpecification.testTypes`` is validated explicitly for its enum). It subsumes the proactive
 ``field_shape_soft_deny`` / ``enum_field_guards`` (which stay for their friendlier messages).
 """
 
@@ -39,6 +41,27 @@ _RECORD_FOR_OP: dict[str, type[BaseModel]] = {
     "update_epic": EpicRecord,
     "update_ticket": TicketRecord,
 }
+
+#: The ticket child-array fields the ``update_ticket`` decompose splits into child rows.
+#: They are persisted and read back through those rows — whose decompose accepts a bare
+#: string as the item text — NOT through the raw record annotation, so validating them
+#: against the strict record shape would be stricter than both the read AND the writer.
+#: Their own decompose + child-row read own the shape. (``testSpecification`` is covered
+#: separately by :func:`_ticket_testtypes_blockers`.)
+_TICKET_DECOMPOSED_FIELDS: frozenset[str] = frozenset(
+    {
+        "acceptanceCriteria",
+        "implementationSteps",
+        "filesToBeCreated",
+        "filesToBeModified",
+        "filesToBeDeleted",
+        "filesToBeReferenced",
+        "blueprintReferences",
+        "codeSnippets",
+        "typeSnippets",
+        "testSpecification",
+    }
+)
 
 
 @cache
@@ -101,6 +124,8 @@ def content_shape_valid(
     adapters = _field_adapters(op)
     blockers: list[str] = []
     for key, value in filled.items():
+        if op == "update_ticket" and key in _TICKET_DECOMPOSED_FIELDS:
+            continue  # decompose-transformed child array — validated via its child rows, not here
         adapter = adapters.get(key)
         if adapter is None:
             continue  # unknown / decompose-only field — the records allow extras; read ignores it

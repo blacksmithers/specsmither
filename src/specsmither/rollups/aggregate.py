@@ -1,12 +1,10 @@
-"""Planning-session aggregate + score-datapoint folds (pure) — port of the TS.
+"""Planning-session aggregate + score-datapoint folds (pure).
 
-Ports ``packages/resolvers/src/aggregators/planning/{compute-datapoints,
-compute-aggregate-update,replay-compute}.ts`` (recon A4). The DynamoDB-stream
-parser / dedup / chunked-WritePlan machinery (``stream-event-parser.ts``,
-``deduplication.ts``, ``project-stream-batch.ts``, ``apply-aggregate.ts``) is
-intentionally dropped: SpecSmither runs this fold *in the mutation transaction*
-(architecture decision 2), so there is no stream to parse and idempotency comes
-from the deterministic datapoint id rather than a stream cursor + filter.
+The ``compute_datapoints`` / ``compute_aggregate_update`` / ``replay_compute``
+folds. There is no stream parser / dedup / chunked-WritePlan machinery: SpecSmither
+runs this fold *in the mutation transaction* (architecture decision 2), so there is
+no stream to parse and idempotency comes from the deterministic datapoint id rather
+than a stream cursor + filter.
 
 Everything here is a **pure fold** — no ORM, no I/O, no module-scope clock. The
 inputs are lightweight frozen dataclasses (:class:`Action`, :class:`Transition`,
@@ -84,8 +82,8 @@ RevisionEntityType = Literal["epic", "ticket", "blueprint"]
 _ActorLiteral = Literal["agent", "human"]
 _OutcomeLiteral = Literal["success", "denied"]
 
-#: ``createEmptyAggregate`` seeds ``last_updated_at`` to the epoch (TS ``new
-#: Date(0)``); every real fold overwrites it with the injected clock.
+#: ``createEmptyAggregate`` seeds ``last_updated_at`` to the epoch; every real fold
+#: overwrites it with the injected clock.
 _EPOCH_ISO = "1970-01-01T00:00:00+00:00"
 
 _GUIDANCE_VARIANT_SET = frozenset(v.value for v in GuidanceVariant)
@@ -120,7 +118,7 @@ CurrentScores = TypedDict(
 )
 """``current_scores`` group: an optional ``global`` (latest scored action) plus
 the per-entity latest scores. ``global`` is a Python keyword, so this group uses
-the functional ``TypedDict`` syntax to keep the verbatim key."""
+the functional ``TypedDict`` syntax to keep the exact ``global`` key."""
 
 
 class EntityCounts(TypedDict):
@@ -288,7 +286,7 @@ class _DatapointCtx:
 
 
 # ---------------------------------------------------------------------------
-# Datapoints (compute-datapoints.ts)
+# Datapoints
 # ---------------------------------------------------------------------------
 
 
@@ -306,8 +304,8 @@ def compute_datapoints(
 ) -> list[Datapoint]:
     """Pure: actions → datapoints. Only ``success`` actions emit; the op →
     trigger mapping is the v0.1.0 greenfield contract (see
-    :func:`_append_datapoints_for_action`). Re-running over the same actions is
-    byte-identical because every id is :func:`datapoint_id`-derived.
+    :func:`_append_datapoints_for_action`). Re-running over the same actions yields
+    identical output because every id is :func:`datapoint_id`-derived.
     """
     ctx = _DatapointCtx(project_id, specification_id, entity_registry)
     out: list[Datapoint] = []
@@ -423,7 +421,7 @@ def _resolve_entity_type(entity_id: str, ctx: _DatapointCtx) -> DatapointEntityT
 
 
 # ---------------------------------------------------------------------------
-# Incremental fold (compute-aggregate-update.ts)
+# Incremental fold
 # ---------------------------------------------------------------------------
 
 
@@ -729,7 +727,7 @@ def _max_id(items: Sequence[Action] | Sequence[Transition]) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Full replay (replay-compute.ts)
+# Full replay
 # ---------------------------------------------------------------------------
 
 

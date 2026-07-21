@@ -1,5 +1,4 @@
-"""``start_planning_session`` (SPS) — ported from
-``planning/verbs/start-planning-session.ts`` (A1 §1.3).
+"""``start_planning_session`` (SPS).
 
 Pure: ``(payload, ports) -> VerbResult``. SPS reads the spec, checks the status
 precondition, resolves both configs, then branches on the active session:
@@ -8,7 +7,7 @@ precondition, resolves both configs, then branches on the active session:
   ``auto_initial``), flipping a ``draft`` spec to ``planning`` in the same plan.
 * **active → resume** — idempotent re-entry. Per locked decision 3 the gate cache is
   **never** trusted: SPS resume ALWAYS re-validates (in-process, cheap) and persists
-  the fresh output, rather than the TS phase-keyed cache read.
+  the fresh output, rather than reading a phase-keyed cache.
 * **awaiting_human_review → deny** — SPS is not for an awaiting session; it denies
   (``sps_not_for_awaiting``) and points the agent at ``get_planning_status``.
 
@@ -30,6 +29,7 @@ from specsmither.domain.enums import (
 from specsmither.lifecycle.audit import build_action
 from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
 from specsmither.lifecycle.guidance.compose import compose_response
+from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.prechecks import Denied, spec_status_check
 from specsmither.lifecycle.session_record import PlanningSessionRecord
 from specsmither.lifecycle.verbs.support import (
@@ -73,7 +73,9 @@ def start_planning_session(
         raise SpecNotInPlanningError(str(spec_status))
 
     project_id = spec.project_id
-    lifecycle_config = resolve_lifecycle_config(ports.config_store, project_id, spec_id)
+    lifecycle_config = resolve_lifecycle_config(
+        ports.config_store, project_id, spec_id, default_language=ports.default_language
+    )
     validator_config = resolve_validator_config(ports.config_store, project_id, spec_id)
 
     active = ports.planning_session_store.get_active_planning_session_by_spec(spec_id)
@@ -181,8 +183,9 @@ def _resume(
 
     # Locked decision 3: never trust the cache on resume — always re-validate.
     spec_full = ports.spec_store.get_spec_full(session.specification_id)
+    language = resolve_language(lifecycle_config)
     validator_output = (
-        ports.validator.validate(spec_full, phase, validator_config)
+        ports.validator.validate(spec_full, phase, validator_config, language=language)
         if spec_full is not None
         else None
     )

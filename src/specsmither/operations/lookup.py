@@ -1,8 +1,8 @@
-"""Loose-reference entity resolution (work item #22 — port of ``operations/lookup.ts``).
+"""Loose-reference entity resolution.
 
 The ``lookup_*`` verbs resolve a *loose* user reference — the kind a human types
 at a prompt — to a single concrete entity. Two resolution modes, in precedence
-order (faithful to the TS ``.find()`` chain):
+order:
 
 1. **Exact number** — when the reference denotes an integer (an ``int``, or an
    all-digit string), match it against the entity's user-facing number
@@ -11,10 +11,10 @@ order (faithful to the TS ``.find()`` chain):
 2. **Fuzzy substring** — case-insensitive ``needle in title`` (``name`` for a
    project). The needle is the trimmed, lower-cased string form of the reference.
 
-DETERMINISM (the load-bearing contract). ``.find()`` in the TS returns the *first*
-element in whatever order the store happened to iterate — fragile. Here every
-candidate set is sorted under an **explicit, pinned key** before the first match
-is taken, so two equally-good matches always resolve to the *same* one:
+DETERMINISM (the load-bearing contract). A naive first-match returns whatever
+element the store happened to iterate first — fragile. Here every candidate set is
+sorted under an **explicit, pinned key** before the first match is taken, so two
+equally-good matches always resolve to the *same* one:
 
 * epics / tickets — by ascending ``epic_number`` / ``ticket_number`` (un-numbered
   rows last), then ``id``. The lower number always wins; ``id`` is the final,
@@ -27,13 +27,11 @@ These are pure read-only verbs: each opens a short-lived read session
 detached :mod:`~specsmither.domain.records` DTO. They never recompute and never
 write (architecture invariant 3 governs *mutations* only).
 
-Faithful-port decisions: the cloud ``lookupWithTiming`` slow-query telemetry
-wrapper and the entire access-control layer (``requireProjectAccess`` /
-``checkAccessViaHierarchy`` — single local user) are dropped. The batch
-``lookupTicketsByStatus`` is a multi-get gated by per-id project access, not a
-fuzzy resolver, so it is out of this module's scope. An unresolvable reference
-returns ``None`` rather than raising — validation/guidance is a 0.1.0 dispatch
-concern; a ``lookup`` is best-effort by contract.
+Scope: there is no slow-query telemetry wrapper and no access-control layer
+(single local user). A batch multi-get gated by per-id access is not a fuzzy
+resolver, so it is out of this module's scope. An unresolvable reference returns
+``None`` rather than raising — validation/guidance is a 0.1.0 dispatch concern; a
+``lookup`` is best-effort by contract.
 """
 
 from __future__ import annotations

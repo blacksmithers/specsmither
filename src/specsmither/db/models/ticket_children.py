@@ -14,13 +14,13 @@ plus the ``TicketFileChange`` / planned-test views. Because the rows are
 regenerated wholesale on every write they carry no audit timestamps — only the
 ULID primary key (``IdMixin``) and their data columns.
 
-Faithful-port corrections applied here:
+Modeling choices worth calling out:
 
 * ``acceptance_criteria`` is the BDD triple ``given`` / ``when`` / ``then``
-  (matching ``crucible.models.AcceptanceCriterion`` and the live amplify model),
-  NOT a flat ``description`` — the architecture §3 "description" text is stale.
-* ``ticket_file_changes`` / ``ticket_tests`` drop the DynamoDB-GSI ``projectId``
-  denormalization; in SQLite the project is a cheap join (recon A5 §5).
+  (matching ``crucible.models.AcceptanceCriterion``), NOT a flat ``description`` —
+  the architecture §3 "description" text is stale.
+* ``ticket_file_changes`` / ``ticket_tests`` carry no ``projectId`` denormalization;
+  in SQLite the project is a cheap join.
 
 ``given`` / ``when`` / ``then`` / ``text`` / ``order`` are valid Python identifiers
 and valid SQLite column names (SQLAlchemy auto-quotes ``order`` and the SQL

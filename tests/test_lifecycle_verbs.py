@@ -1,6 +1,6 @@
 """End-to-end parity tests for the four agent-facing verbs + the dispatch facade.
 
-Work items #9 (``start`` / ``action`` / ``complete`` / ``inspect``) and #10 (the
+Work items #9 (``start`` / ``action`` / ``complete``) and #10 (the
 :func:`~specsmither.lifecycle.dispatch.run_verb` / ``create_lifecycle().handle``
 dispatch). Each verb is driven through the real
 :func:`~specsmither.lifecycle.dispatch.run_verb` convenience over a real on-disk
@@ -26,8 +26,6 @@ Pins:
 * CPS denies (``gate_not_passed``) when the gate fails and parks the session →
   ``awaiting_human_review`` when it passes (recording a same-phase ``ai_agent``
   transition);
-* ``inspect`` is read-only — it composes a status report from the persisted blob and
-  writes nothing;
 * the dispatch facade rejects an unknown verb.
 """
 
@@ -81,7 +79,11 @@ class _StubValidator:
         self.calls: list[PlanningPhase] = []
 
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
         self.calls.append(phase)
         return ValidatorOutput(
@@ -424,51 +426,6 @@ def test_cps_parks_session_when_gate_passes(tmp_path: Path) -> None:
         )
         success = [a for a in _actions(s, sid) if a.outcome == "success"]
         assert any(a.operation == "complete_planning_session" for a in success)
-
-
-# --------------------------------------------------------------------------- #
-# inspect — read-only status report                                          #
-# --------------------------------------------------------------------------- #
-
-
-def test_inspect_is_read_only(tmp_path: Path) -> None:
-    factory = _open(tmp_path)
-    blob = {
-        "gate_result": "pass",
-        "local_score": 0.81,
-        "per_epic_score": {},
-        "per_ticket_score": {},
-        "findings": [],
-        "validated_phase": "planning_spec",
-    }
-    with factory.begin() as s:
-        _seed_base(s, spec_status="planning")
-        sid = _add_session(
-            s,
-            status="active",
-            current_phase="planning_spec",
-            last_validator_output=blob,
-            last_gate_result="pass",
-            last_score=0.81,
-        )
-
-    validator = _StubValidator()
-    response = run_verb(
-        factory,
-        LifecycleEvent(verb="inspect", payload={"sessionId": sid}),
-        validator=validator,
-    )
-
-    # Read-only: never re-validates, and surfaces the persisted blob's gate.
-    assert validator.calls == []
-    assert response.outcome == "success"
-    assert response.gate_result == "pass"
-
-    with factory.begin() as s:
-        # Nothing was written — no audit action, session untouched.
-        assert _actions(s, sid) == []
-        sess = s.get(PlanningSession, sid)
-        assert sess is not None and sess.status == "active"
 
 
 # --------------------------------------------------------------------------- #

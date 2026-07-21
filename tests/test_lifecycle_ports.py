@@ -229,7 +229,11 @@ class _StubConfigStore:
 
 class _StubValidator:
     def validate(
-        self, spec_full: SpecFull, phase: PlanningPhase, config: Mapping[str, Any]
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
     ) -> ValidatorOutput:
         return ValidatorOutput(
             gate_result="pass",

@@ -1,13 +1,11 @@
-"""Single-hop cascade engine (pure) — ports the TS ``cascade`` aggregators.
+"""Single-hop cascade engine (pure).
 
-Replicates ``packages/operations/src/aggregators/cascade/{on-completed,
-on-uncompleted,on-dependency-change,find-dependents,dependency-checker}.ts``.
+Covers the on-completed / on-uncompleted / on-dependency-change transitions plus
+the find-dependents and dependency-checker helpers.
 
-The transitive ``chain.ts`` and the chain-only ``cascade/cycle-detection.ts`` are
-DROPPED on purpose: ``chain`` looks like a BFS but never enqueues discovered
-dependents (it is single-level, codified by ``chain.test.ts``: linear A→B→C with
-only A done promotes ONLY B — C is *not* reached), and the DFS cycle detector
-only ever guarded ``chain``. Cycle reporting lives in the tree's Tarjan SCC.
+A transitive chain-cascade is DROPPED on purpose: promotion is single-level
+(linear A→B→C with only A done promotes ONLY B — C is *not* reached), and the
+only cycle guard it needed is subsumed by the tree's Tarjan SCC.
 
 Why single-hop is complete: completing X can ready only X's *direct* dependents;
 a ticket going ``ready`` (≠ ``done``) cannot unblock anyone, so there is no
@@ -15,17 +13,15 @@ transitive ready-cascade to propagate. The recompute worklist re-fires the
 single-hop variants per applied transition instead.
 
 Determinism notes:
-- ``ticketStates.get(id)`` returning ``undefined`` for an unknown id maps to
-  ``states.get(id)`` returning ``None``; the ``!= 'done'`` / ``not in {…}`` guards
-  behave identically, so an unknown id is treated exactly as the TS does.
+- ``states.get(id)`` returning ``None`` for an unknown id flows through the
+  ``!= 'done'`` / ``not in {…}`` guards, so an unknown id is treated consistently.
 - ``check_dependencies_completed`` counts an UNKNOWN dependency id (absent from
-  ``states``) as BOTH a blocker and missing (``dependency-checker.ts`` :30-33).
-  Callers pass the FULL spec neighborhood, so this never falsely blocks in
-  practice — it is kept for parity.
+  ``states``) as BOTH a blocker and missing. Callers pass the FULL spec
+  neighborhood, so this never falsely blocks in practice — it is kept for safety.
 - ``find_dependents`` / ``find_dependencies`` dedup and preserve first-seen
-  (insertion) order, matching the TS linear edge scan.
-- Reason strings (``'deps-completed'`` / ``'dep-reverted'``) are verbatim TS so
-  transition lists byte-compare against the golden fixtures.
+  (insertion) order from the linear edge scan.
+- Reason strings (``'deps-completed'`` / ``'dep-reverted'``) are fixed literals so
+  transition lists compare cleanly against the golden fixtures.
 """
 
 from __future__ import annotations
@@ -51,9 +47,9 @@ __all__ = [
 class CascadeTransition:
     """A single ticket status change proposed by the cascade engine.
 
-    Mirrors the TS ``CascadeTransition`` (``from``/``to`` renamed to the
-    non-keyword ``from_status``/``to_status``). ``reason`` is the verbatim TS
-    literal (``'deps-completed'`` or ``'dep-reverted'``).
+    ``from``/``to`` are spelled as the non-keyword ``from_status``/``to_status``.
+    ``reason`` is one of the fixed literals (``'deps-completed'`` or
+    ``'dep-reverted'``).
     """
 
     ticket_id: str
@@ -64,7 +60,7 @@ class CascadeTransition:
 
 @dataclass(frozen=True, slots=True)
 class DependencyCheckResult:
-    """Result of ``check_dependencies_completed`` — mirrors the TS interface.
+    """Result of ``check_dependencies_completed``.
 
     ``all_completed`` is true iff every dependency is ``done``. An unknown
     dependency id appears in BOTH ``blockers`` and ``missing``.
@@ -105,7 +101,7 @@ def check_dependencies_completed(
     """Whether every dependency of ``ticket_id`` is ``done``.
 
     No dependencies → vacuously completed. An UNKNOWN dependency id (absent from
-    ``states``) counts as both a blocker and missing (``dependency-checker.ts``).
+    ``states``) counts as both a blocker and missing.
     """
     dep_ids = find_dependencies(edges, ticket_id)
     if not dep_ids:

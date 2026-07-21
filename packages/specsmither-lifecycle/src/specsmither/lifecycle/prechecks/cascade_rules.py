@@ -1,8 +1,6 @@
 """Pre-check: would a delete orphan dependency edges without confirmation?
 
-Faithful port of ``planning/pre-checks/cascade-rules.ts`` (M8.5, A1 §1.4). Pure.
-
-The ticket dependency graph lives on ``SpecFull.dependencies``
+Pure. The ticket dependency graph lives on ``SpecFull.dependencies``
 (:class:`~specsmither.lifecycle.ports.SpecDependencyEdge` ``{from_ticket_id,
 to_ticket_id}`` — ``from`` depends on ``to``). Deleting a ticket (or an epic
 whose tickets are depended on from outside) would orphan those edges, so the op

@@ -62,6 +62,7 @@ from specsmither.operations.workspace import (
     WorkspaceConfig,
     init,
     resolve_context,
+    resolve_workspace_root,
     write_workspace_config,
 )
 
@@ -331,7 +332,9 @@ class Data:
         # DB file so the TUI can read an empty engine before the workspace is bound.
         self._engine = init_db(self.context.db_path)
         self.session_factory: sessionmaker[Session] = make_session_factory(self._engine)
-        self.dispatcher = make_dispatcher(self.session_factory, clock=clock)
+        self.dispatcher = make_dispatcher(
+            self.session_factory, clock=clock, project_root=resolve_workspace_root(self.cwd)
+        )
 
     # -- lifecycle ------------------------------------------------------------ #
 

@@ -1,7 +1,6 @@
 """Runtime DB-row DTOs + the ``SpecFull`` recompose.
 
-These are the *flat* persistence-row shapes (a clean port of
-``api-types/runtime/{specification,epic,ticket,blueprint}-record.ts``) — the
+These are the *flat* persistence-row shapes — the
 denormalized columns + JSON fields + count rollups the SQLite repositories read
 and write. They are deliberately distinct from crucible's *nested* authoring
 models (``crucible.models.{Specification,Epic,Ticket,Blueprint}``): a record is
@@ -14,11 +13,11 @@ Two halves:
    with auto camelCase aliases, ``populate_by_name``, ``extra="allow"``) so they
    round-trip to the same camelCase wire shape crucible expects. Cloud-only fields
    are dropped (``contentS3Key``, the ``projectId`` denorm on child rows, S3 / GSI
-   / auth / review-session fields). Where the SpecSmither schema (architecture §3)
-   diverges from the TS record we follow §3 (e.g. the ``last_validator_output`` /
-   ``dependency_tree`` / graph-metric columns; the BDD ``given``/``when``/``then``
-   acceptance-criterion triple that replaced the legacy flat ``description`` in
-   M1.5.4; ``coverage_type`` on blueprints).
+   / auth / review-session fields). The SpecSmither schema (architecture §3) adds
+   its own columns (e.g. the ``last_validator_output`` / ``dependency_tree`` /
+   graph-metric columns; the BDD ``given``/``when``/``then`` acceptance-criterion
+   triple that replaced the legacy flat ``description``; ``coverage_type`` on
+   blueprints).
 
 2. :func:`build_spec_full` — assembles the flat records back into crucible's nested
    :class:`crucible.models.Specification` (epics carrying ordered tickets; tickets
@@ -101,8 +100,7 @@ class DependencyEdge(_RecordBase):
     """A ``ticket_dependencies`` row (a directed edge ``ticket → depends_on``).
 
     ``ticket_id`` is the dependent ticket; ``depends_on_id`` is the ticket it
-    depends on. Mirrors ``TicketDependency`` (``ticket-record.ts``); the unique
-    key is ``(ticket_id, depends_on_id)``.
+    depends on. The unique key is ``(ticket_id, depends_on_id)``.
     """
 
     id: str | None = None
@@ -129,7 +127,7 @@ class TicketBlueprintRef(_RecordBase):
 
 
 class BlueprintRecord(_RecordBase):
-    """A ``blueprints`` row (port of ``BlueprintRecord`` + architecture §3).
+    """A ``blueprints`` row (``BlueprintRecord``; architecture §3).
 
     Drops ``contentS3Key`` (content is stored inline); adds ``coverage_type``
     (§3). ``status`` is a DB-only publication state with no crucible counterpart.
@@ -154,10 +152,10 @@ class BlueprintRecord(_RecordBase):
 
 
 class TicketRecord(_RecordBase):
-    """A fully-hydrated ``tickets`` row (port of ``TicketFull`` + child recompose).
+    """A fully-hydrated ``tickets`` row (``TicketFull`` + child recompose).
 
     Runtime-state fields (``status``/``block_reason``/``progress``/
-    ``current_work_session_id``) stay on the ticket (ME.0 §12.3). The flat test
+    ``current_work_session_id``) stay on the ticket. The flat test
     fields (``quality_gates``/``test_commands``/``coverage_target``) live on the
     row; only ``test_types`` is normalized into a child table — here it rides back
     as the recomposed list. Acceptance criteria, implementation steps and the four
@@ -212,7 +210,7 @@ class TicketRecord(_RecordBase):
 
 
 class EpicRecord(_RecordBase):
-    """An ``epics`` row (port of ``EpicFull``).
+    """An ``epics`` row (``EpicFull``).
 
     Spec/epic content arrays are stored as JSON columns (not child tables) and
     reuse crucible's structured sub-models. AI-readiness columns are dropped
@@ -261,11 +259,11 @@ class EpicRecord(_RecordBase):
 
 
 class SpecificationRecord(_RecordBase):
-    """A ``specifications`` row (port of ``SpecificationFull`` + architecture §3).
+    """A ``specifications`` row (``SpecificationFull``; architecture §3).
 
-    Content arrays are JSON columns reusing crucible's structured sub-models (the
-    ``string[]`` typing in the TS record is stale — the live store holds the full
-    structured objects). Drops AI-readiness columns; adds the §3 validator/graph
+    Content arrays are JSON columns reusing crucible's structured sub-models (they
+    hold the full structured objects, not plain string lists). Drops AI-readiness
+    columns; adds the §3 validator/graph
     cache columns (``last_validator_output``, ``last_gate_result``,
     ``last_validated_at``, ``dependency_tree`` + version/metrics). ``project_id`` is
     the spec's own owning project (kept — it is *not* a child-row denorm).
@@ -338,9 +336,9 @@ def _build_ticket(
     deps_by_ticket: dict[str, list[DependencyLink]],
     refs_by_ticket: dict[str, list[BlueprintReference]],
 ) -> Ticket:
-    # ME.6: the grouped `testSpecification` view is only valid with >=1 test type;
-    # a ticket with no planned tests surfaces the field as absent (matches the TS
-    # recompose, where an empty view is not emitted).
+    # The grouped `testSpecification` view is only valid with >=1 test type;
+    # a ticket with no planned tests surfaces the field as absent (an empty view
+    # is not emitted).
     test_specification: TestSpecification | None = None
     if record.test_types:
         test_specification = TestSpecification(

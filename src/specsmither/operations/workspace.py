@@ -36,6 +36,7 @@ from specsmither.operations.project import create_project
 __all__ = [
     "DB_ENV",
     "HOME_ENV",
+    "LANGUAGE_ENV",
     "PROJECT_ENV",
     "InitResult",
     "WorkspaceConfig",
@@ -45,6 +46,8 @@ __all__ = [
     "resolve_context",
     "resolve_db_path",
     "resolve_home",
+    "resolve_language",
+    "resolve_workspace_root",
     "write_workspace_config",
 ]
 
@@ -52,6 +55,7 @@ __all__ = [
 HOME_ENV = "SPECSMITHER_HOME"
 DB_ENV = "SPECSMITHER_DB"
 PROJECT_ENV = "SPECSMITHER_PROJECT"
+LANGUAGE_ENV = "SPECSMITHER_LANGUAGE"
 
 _DEFAULT_HOME_DIRNAME = ".specsmither"
 _DB_FILENAME = "specsmither.db"
@@ -79,6 +83,35 @@ def resolve_db_path(env: Mapping[str, str] | None = None) -> Path:
     if explicit:
         return Path(explicit).expanduser()
     return resolve_home(env) / _DB_FILENAME
+
+
+def resolve_language(env: Mapping[str, str] | None = None) -> str:
+    """The ambient guidance language (``$SPECSMITHER_LANGUAGE`` → ``"en"``).
+
+    A global default the dispatcher passes to the lifecycle as
+    ``LifecyclePorts.default_language``; a per-project / per-spec
+    ``planning-lifecycle`` ``guidance.language`` config still wins over it. The raw
+    value is passed through verbatim — the lifecycle normalizes it (``pt`` / ``pt_BR``
+    → ``pt-br``) and degrades an unsupported tag to ``en``.
+    """
+    return _str_or_none(_env(env).get(LANGUAGE_ENV)) or "en"
+
+
+def resolve_workspace_root(cwd: str | Path | None = None) -> Path:
+    """The project working-tree root — the grep root for validator file evidence.
+
+    Spec file paths (``src/core/index.py`` …) are relative to the project
+    repository root, which is where the ``.specsmither/`` binding lives. Returns the
+    nearest ancestor of *cwd* (default: the current directory) holding a
+    ``.specsmither/`` directory, or *cwd* itself when none is found. The validator
+    adapter probes this root to supply ``existingFiles`` (grep evidence) to crucible.
+    """
+
+    start = (Path(cwd) if cwd is not None else Path.cwd()).resolve()
+    for candidate in (start, *start.parents):
+        if (candidate / _WORKSPACE_DIRNAME).is_dir():
+            return candidate
+    return start
 
 
 @dataclass(frozen=True)

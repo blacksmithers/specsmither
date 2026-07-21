@@ -1,8 +1,6 @@
-"""Pre-check: do the entity ids an APS write references actually exist? (#11a)
+"""Pre-check: do the entity ids an APS write references actually exist?
 
-A faithful port of the entity-refs-exist guard added in ``d4e07bf0``. Pure.
-
-Before any APS write, this fails closed on a dangling foreign-key reference so the
+Pure. Before any APS write, this fails closed on a dangling foreign-key reference so the
 executor never (a) raises a raw SQLite FK ``IntegrityError`` (``create_ticket`` with an
 ``epicId`` that is not an epic) nor (b) silently no-ops an ``update_``/``delete_`` on an
 unknown id (a 0-row write the agent is told "succeeded" — the phantom-success gaslight).
