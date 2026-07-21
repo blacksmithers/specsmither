@@ -60,6 +60,7 @@ from specsmither.lifecycle.prechecks import (
     spec_status_check,
     validate_dependencies_batch,
 )
+from specsmither.lifecycle.prechecks.cross_val_file_redirect import cross_val_file_redirect
 from specsmither.lifecycle.prechecks.strip_field_declarations import (
     strip_agent_wire_field_declarations,
 )
@@ -351,6 +352,20 @@ def _accept(
             ports, session, operation, op_payload, _content_denial(exc),
             user_id, lifecycle_config, validator_config,
         )
+
+    # An ordering-only late update_ticket in cross_validation redirects to create_dependencies
+    # instead of rolling back (the consumed file exists; only the dependency edge is missing).
+    # Findings-conditioned over the projected post-update spec.
+    if operation == "update_ticket" and current_phase == PlanningPhase.CROSS_VALIDATION and is_late_op:
+        redirect = cross_val_file_redirect(
+            operation,
+            current_phase,
+            op_payload or {},
+            projected.spec.model_dump(by_alias=True, exclude_none=True),
+            validator_config,
+        )
+        if isinstance(redirect, Denied):
+            return _denied(ports, session, operation, op_payload, redirect, user_id, lifecycle_config, validator_config)
 
     op_def = get_operation_def(cast(PlanningOperationName, operation))
     native = op_def.native_phase if op_def is not None else None
