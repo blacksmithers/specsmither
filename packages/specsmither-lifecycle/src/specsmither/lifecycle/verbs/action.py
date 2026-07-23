@@ -15,7 +15,11 @@ Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 2. on accept — project the mutation in memory, compute the *effective* phase (a late
    op rewinds to its native phase), re-validate the projected spec, evaluate the
    phase gate, build the audit action (+ a rollback transition for a late op), apply
-   the actor-conditional post-status, and assemble the success WritePlan.
+   the actor-conditional post-status, and assemble the success WritePlan. The verdict
+   the agent sees + the persisted ``last_gate_result`` come from the SPEC-WIDE gate
+   (the same scope ``complete_planning_session`` / ``get_planning_status`` use, so
+   ``action`` never says "gate pass" while ``complete`` denies); the touched-scoped
+   gate only drives the per-entity score datapoints.
 
 ``payload`` is ``{sessionId, operation, payload?, actor?, userId?}``.
 """
@@ -36,7 +40,10 @@ from specsmither.domain.enums import (
 )
 from specsmither.lifecycle.audit import build_action, build_transition
 from specsmither.lifecycle.config import resolve_lifecycle_config, resolve_validator_config
-from specsmither.lifecycle.gate import evaluate_phase_gate
+from specsmither.lifecycle.gate import (
+    evaluate_phase_gate,
+    evaluate_phase_gate_spec_wide,
+)
 from specsmither.lifecycle.guidance.compose import (
     compose_get_planning_status,
     compose_response,
@@ -440,6 +447,21 @@ def _accept(
         all_epic_ids=[epic.id for epic in projected.epics],
         all_ticket_ids=[t.id for epic in projected.epics for t in epic.tickets],
     )
+    # The verdict the agent SEES, the persisted ``last_gate_result``, and the guidance's
+    # next-entity list must be the SPEC-WIDE per-entity all-pass — the SAME scope
+    # ``complete_planning_session`` and ``get_planning_status`` use — so ``action`` never
+    # reports "gate pass" (the touched epic cleared) while ``complete`` denies (another
+    # epic is still below threshold), which would trap an agent in an edit→complete loop
+    # and leave a misleading ``last_gate_result="pass"`` for handover/UI/status-cache
+    # consumers. The touched-scoped ``gate`` above still drives ``entity_score_writes``:
+    # a score datapoint is stamped only for the entity THIS op actually touched, not a
+    # spurious full-refresh of every entity on every edit.
+    spec_wide_gate = evaluate_phase_gate_spec_wide(
+        current_phase=effective_phase,
+        validator_output=validator_output,
+        spec_full=projected,
+        validator_config=validator_config,
+    )
 
     rollback: ApsRollback | None = None
     if is_late_op:
@@ -477,7 +499,7 @@ def _accept(
         else GuidanceVariant.HUMAN_FEEDBACK
         if prev_session_status == _awaiting
         else GuidanceVariant.GATE_PASSED
-        if gate.gate_outcome == "pass"
+        if spec_wide_gate.gate_outcome == "pass"
         else GuidanceVariant.GATE_FAILED
     )
 
@@ -488,12 +510,12 @@ def _accept(
             current_phase=effective_phase,
             status=post_session_status,
             last_score=validator_output.local_score,
-            last_gate_result=gate.gate_outcome,
+            last_gate_result=spec_wide_gate.gate_outcome,
             actions_count=(session.actions_count or 0) + 1,
         ),
         spec_full=spec_full,
         validator_output=validator_output,
-        gate_result=gate,
+        gate_result=spec_wide_gate,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
     )
@@ -529,7 +551,7 @@ def _accept(
         session_id=session.id,
         mutation=mutation,
         action=action,
-        gate_result=gate.gate_outcome,
+        gate_result=spec_wide_gate.gate_outcome,
         validator_output=validator_output,
         entity_score_writes=gate.entity_score_writes,
         prev_session_status=prev_session_status,

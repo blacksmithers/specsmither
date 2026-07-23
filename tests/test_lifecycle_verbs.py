@@ -45,6 +45,7 @@ from specsmither.db.base import make_session_factory, new_ulid, now_iso
 from specsmither.db.migrations import init_db
 from specsmither.db.models import (
     Epic,
+    PlanningEntityScoreDatapoint,
     PlanningPhaseTransition,
     PlanningSession,
     PlanningSessionAction,
@@ -91,6 +92,39 @@ class _StubValidator:
             gate_result=cast("Any", self.gate_result),
             local_score=self.local_score,
             per_epic_score={},
+            per_ticket_score={},
+            findings=[],
+            validated_phase=phase,
+        )
+
+
+class _PerEpicValidator:
+    """A validator with EXPLICIT per-epic scores + a fixed composite ``gate_result``.
+
+    Drives the ``epic_expansion`` gate deterministically: the composite ``gate_result``
+    is orthogonal to the per-entity scores, so the touched-subset gate
+    (:func:`evaluate_phase_gate`) and the spec-wide all-pass gate
+    (:func:`evaluate_phase_gate_spec_wide`) can *disagree* — exactly the split the
+    ``action`` verb must resolve in favor of the spec-wide verdict.
+    """
+
+    def __init__(self, per_epic_score: dict[str, float], *, gate_result: str = "pass") -> None:
+        self.per_epic_score = per_epic_score
+        self.gate_result = gate_result
+        self.calls: list[PlanningPhase] = []
+
+    def validate(
+        self,
+        spec_full: SpecFull,
+        phase: PlanningPhase,
+        config: Mapping[str, Any],
+        language: str = "en",
+    ) -> ValidatorOutput:
+        self.calls.append(phase)
+        return ValidatorOutput(
+            gate_result=cast("Any", self.gate_result),
+            local_score=0.9,
+            per_epic_score=dict(self.per_epic_score),
             per_ticket_score={},
             findings=[],
             validated_phase=phase,
@@ -396,6 +430,118 @@ def test_aps_forbidden_op_denies(tmp_path: Path) -> None:
         denied = [a for a in _actions(s, sid) if a.outcome == "denied"]
         assert any(a.operation == "create_epic" for a in denied)
         assert denied[0].payload["deny_reason"] == "current_phase_must_finish_first"
+
+
+EPIC2_ID = "01EPIC000000000000000000B"
+
+
+def _add_second_epic(session: Session) -> None:
+    session.add(
+        Epic(
+            id=EPIC2_ID,
+            specification_id=SPEC_ID,
+            epic_number=2,
+            title="E2",
+            description="d",
+            objective="o",
+            order=2,
+        )
+    )
+    session.flush()
+
+
+def _scores(session: Session, sid: str) -> list[tuple[str, float]]:
+    stmt = select(PlanningEntityScoreDatapoint).where(
+        PlanningEntityScoreDatapoint.planning_session_id == sid
+    )
+    return [(d.entity_id, d.score) for d in session.execute(stmt).scalars()]
+
+
+def test_aps_expansion_reports_the_spec_wide_verdict_not_the_touched_subset(
+    tmp_path: Path,
+) -> None:
+    # THE regression for the "contradiction migrated to the mutating path" bug: at
+    # epic_expansion an edit that clears the TOUCHED epic must still report the SPEC-WIDE
+    # gate (another epic is below threshold), so ``action`` never says "gate pass" while
+    # ``complete``/``get_planning_status`` say "fail". The persisted ``last_gate_result``
+    # follows the spec-wide verdict, but the per-entity score datapoint stays touched-scoped.
+    factory = _open(tmp_path)
+    with factory.begin() as s:
+        _seed_base(s, spec_status="planning")
+        _add_second_epic(s)
+        sid = _add_session(s, status="active", current_phase="epic_expansion")
+
+    # Touched epic (A) clears the threshold; the other epic (B) is well below it. The
+    # composite ``gate_result`` is "pass" (orthogonal), so ONLY the spec-wide all-pass
+    # distinguishes the two verdicts.
+    validator = _PerEpicValidator({EPIC_ID: 90.0, EPIC2_ID: 10.0}, gate_result="pass")
+    response = run_verb(
+        factory,
+        LifecycleEvent(
+            verb="action",
+            payload={
+                "sessionId": sid,
+                "operation": "update_epic",
+                "payload": {"id": EPIC_ID, "fields": {"description": "expanded epic A"}},
+            },
+        ),
+        validator=validator,
+    )
+
+    # The agent-facing verdict is the spec-wide fail — NOT a misleading touched "pass".
+    assert response.outcome == "success"
+    assert response.gate_result == "fail"
+    assert response.variant == GuidanceVariant.GATE_FAILED
+
+    with factory.begin() as s:
+        sess = s.get(PlanningSession, sid)
+        assert sess is not None
+        # Persisted for handover/UI/status-cache consumers: the spec-wide verdict.
+        assert sess.last_gate_result == "fail"
+        # The score datapoint is stamped ONLY for the touched epic — no spurious full
+        # refresh of every entity on every edit.
+        assert _scores(s, sid) == [(EPIC_ID, 90.0)]
+
+    # complete_planning_session decides the SAME verdict over the SAME state — no divergence.
+    completion = run_verb(
+        factory,
+        LifecycleEvent(verb="complete", payload={"sessionId": sid}),
+        validator=_PerEpicValidator({EPIC_ID: 90.0, EPIC2_ID: 10.0}, gate_result="pass"),
+    )
+    assert completion.outcome == "denied"
+    assert completion.gate_result == "fail"
+
+
+def test_aps_expansion_gate_passes_when_every_entity_clears(tmp_path: Path) -> None:
+    # Symmetric floor: when every epic clears its threshold the spec-wide gate agrees with
+    # the touched subset — ``action`` reports gate_passed and persists "pass".
+    factory = _open(tmp_path)
+    with factory.begin() as s:
+        _seed_base(s, spec_status="planning")
+        _add_second_epic(s)
+        sid = _add_session(s, status="active", current_phase="epic_expansion")
+
+    validator = _PerEpicValidator({EPIC_ID: 90.0, EPIC2_ID: 88.0}, gate_result="pass")
+    response = run_verb(
+        factory,
+        LifecycleEvent(
+            verb="action",
+            payload={
+                "sessionId": sid,
+                "operation": "update_epic",
+                "payload": {"id": EPIC_ID, "fields": {"description": "expanded epic A"}},
+            },
+        ),
+        validator=validator,
+    )
+
+    assert response.outcome == "success"
+    assert response.gate_result == "pass"
+    assert response.variant == GuidanceVariant.GATE_PASSED
+
+    with factory.begin() as s:
+        sess = s.get(PlanningSession, sid)
+        assert sess is not None and sess.last_gate_result == "pass"
 
 
 # --------------------------------------------------------------------------- #
