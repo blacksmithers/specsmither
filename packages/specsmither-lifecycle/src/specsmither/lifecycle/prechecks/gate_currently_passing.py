@@ -145,7 +145,8 @@ def gate_currently_passing(
     # for the ``*_expansion`` phases the gate is the spec-wide per-entity all-pass and
     # excludes the global cascade, which is enforced only at ``cross_validation``.
     # ``evaluate_phase_gate_spec_wide`` builds the spec-wide scope; the same helper backs
-    # the status-report guidance, so the CPS gate and the guidance never disagree.
+    # the status-report guidance (``get_planning_status`` re-validates live for the
+    # ``phase_status_report`` body), so the CPS gate and the guidance never disagree.
     gate = evaluate_phase_gate_spec_wide(
         current_phase=phase,
         validator_output=output,

@@ -20,7 +20,8 @@ Pins:
 * SPS on an ``awaiting_human_review`` session denies (``sps_not_for_awaiting``);
 * an APS ``update_spec`` runs the full pipeline, persists the audit action + the
   validator-output blob, and the persisted ``last_gate_result`` matches the validator;
-* APS ``get_planning_status`` short-circuits — the validator is NEVER called;
+* APS ``get_planning_status`` short-circuits the mutation pipeline; the ``phase_status_report``
+  body re-validates live (so its gate agrees with ``complete``) while other variants do not;
 * a forbidden op (``create_epic`` in ``planning_spec``) denies, leaving the session
   untouched;
 * CPS denies (``gate_not_passed``) when the gate fails and parks the session →
@@ -307,11 +308,52 @@ def test_aps_update_spec_runs_pipeline_and_persists(tmp_path: Path) -> None:
         assert any(a.operation == "update_spec" for a in success)
 
 
-def test_aps_get_planning_status_short_circuits_without_validating(tmp_path: Path) -> None:
+def test_aps_get_planning_status_report_revalidates_live(tmp_path: Path) -> None:
+    # The phase_status_report body must agree with what complete_planning_session would
+    # decide: it re-validates live and reports the FRESH gate, NOT a stale cache. Here the
+    # session cached last_gate_result="pass" but a live re-validate fails (e.g. goals<3
+    # while local_score is orthogonally high) — the poll must report "fail".
     factory = _open(tmp_path)
     with factory.begin() as s:
         _seed_base(s, spec_status="planning")
-        sid = _add_session(s, status="active", current_phase="planning_spec")
+        sid = _add_session(
+            s,
+            status="active",
+            current_phase="planning_spec",
+            last_gate_result="pass",
+            last_score=1.0,
+        )
+
+    validator = _StubValidator(gate_result="fail", local_score=1.0)
+    response = run_verb(
+        factory,
+        LifecycleEvent(
+            verb="action",
+            payload={"sessionId": sid, "operation": "get_planning_status"},
+        ),
+        validator=validator,
+    )
+
+    # The status-report poll RE-VALIDATES (once, at the session's phase) and the reported
+    # gate follows the live verdict — not the stale "pass" cache.
+    assert validator.calls == [PlanningPhase.PLANNING_SPEC]
+    assert response.outcome == "success"
+    assert response.gate_result == "fail"
+
+    with factory.begin() as s:
+        ops = {a.operation for a in _actions(s, sid)}
+        assert "get_planning_status" in ops
+        # Display-only: the poll does NOT persist a refreshed gate cache.
+        cached = _sessions_for_spec(s)[0].last_gate_result
+        assert cached == "pass"
+
+
+def test_aps_get_planning_status_closed_does_not_revalidate(tmp_path: Path) -> None:
+    # Non-status-report variants keep composing from the cached state (no validate call).
+    factory = _open(tmp_path)
+    with factory.begin() as s:
+        _seed_base(s, spec_status="planning")
+        sid = _add_session(s, status="closed", current_phase="planning_spec")
 
     validator = _StubValidator()
     response = run_verb(
@@ -323,13 +365,8 @@ def test_aps_get_planning_status_short_circuits_without_validating(tmp_path: Pat
         validator=validator,
     )
 
-    # The poll/resume verb NEVER re-runs the validator.
     assert validator.calls == []
     assert response.outcome == "success"
-
-    with factory.begin() as s:
-        ops = {a.operation for a in _actions(s, sid)}
-        assert "get_planning_status" in ops
 
 
 def test_aps_forbidden_op_denies(tmp_path: Path) -> None:
