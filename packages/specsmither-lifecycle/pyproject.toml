@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "specsmither-lifecycle"
-version = "0.4.1"
+version = "0.4.2"
 description = "The PURE planning-lifecycle core of SpecSmither — the crucible-gated verb surface (start/action/complete/inspect + handovers), the in-memory operations projector, the WritePlan data contract, and the domain records. No SQLAlchemy, no Textual, no MCP."
 readme = "README.md"
 requires-python = ">=3.11"

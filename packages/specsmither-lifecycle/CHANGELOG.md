@@ -4,6 +4,29 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.2
+
+Fixes the counterpart gate-consistency bug on the mutating path: `action_planning_session`
+now reports the same spec-wide verdict as completion and the status poll.
+
+### Fixed
+
+- **`action_planning_session` no longer contradicts `complete_planning_session`.** The
+  verb's agent-facing verdict, its persisted `last_gate_result`, and the guidance's
+  next-entity list were derived from `evaluate_phase_gate` (touched-subset scope). At
+  the two `*_expansion` phases that gate scores only the entity the operation touched,
+  so an edit that cleared the touched epic could report `gate_passed` while another epic
+  still sat below threshold — a state `complete_planning_session` and the 0.4.1-fixed
+  `get_planning_status` both call "fail". That trapped an agent in an edit→complete loop
+  and persisted a misleading `last_gate_result="pass"` for every downstream consumer
+  (the handover/approve precondition, the UI gate badge, the status-poll cache
+  fallback). The verdict, the persisted gate, and the next-entity list now come from
+  `evaluate_phase_gate_spec_wide` — the same spec-wide all-pass scope completion and the
+  status poll use — so the three verbs never disagree. The touched-scoped gate is
+  retained only for the per-entity score datapoints, so a score is still stamped just
+  for the entity the operation touched, not a spurious full refresh of every entity on
+  every edit.
+
 ## 0.4.1
 
 Fixes a gate-consistency bug between the read-only status poll and completion.
