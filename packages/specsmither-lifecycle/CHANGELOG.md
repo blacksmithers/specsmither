@@ -4,6 +4,25 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.1
+
+Fixes a gate-consistency bug between the read-only status poll and completion.
+
+### Fixed
+
+- **`get_planning_status` no longer contradicts `complete_planning_session`.** The
+  read-only status poll composed the gate verdict from the cached
+  `session.last_gate_result`, while completion always re-validates live — so a spec
+  whose `local_score` reached the threshold but violated the structural floor (e.g.
+  `goals`/`requirements` with fewer than three items) could report "gate pass" on the
+  poll yet be denied by completion, trapping an agent in a status→complete loop. The
+  poll now re-validates live for the `PHASE_STATUS_REPORT` variant, routing through the
+  same `evaluate_phase_gate_spec_wide` the completion gate uses, so the two agree
+  unconditionally — over a stale cache, after a reject re-activates a session, or
+  against an out-of-band edit. The re-validation is display-only: no fresh gate cache is
+  persisted, and every other poll variant (including the `human_feedback_received`
+  synthetic move) keeps composing from cached state unchanged.
+
 ## 0.4.0
 
 Adds a guidance internationalization layer and two structured recovery plans for the
