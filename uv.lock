@@ -1265,7 +1265,7 @@ wheels = [
 
 [[package]]
 name = "specsmither"
-version = "0.4.1"
+version = "0.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "crucible-forge" },
@@ -1312,7 +1312,7 @@ dev = [
 
 [[package]]
 name = "specsmither-lifecycle"
-version = "0.4.1"
+version = "0.4.2"
 source = { editable = "packages/specsmither-lifecycle" }
 dependencies = [
     { name = "crucible-forge" },
