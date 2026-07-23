@@ -615,15 +615,25 @@ class GetPlanningStatusComposition:
 def compose_get_planning_status(
     session: PlanningSessionRecord,
     *,
+    spec_full: SpecFull | None = None,
+    validator_output: ValidatorOutput | None = None,
     lifecycle_config: Mapping[str, Any] | None = None,
     validator_config: Mapping[str, Any] | None = None,
 ) -> GetPlanningStatusComposition:
     """Compose the read-only get_planning_status response (``composeGetPlanningStatus``).
 
-    Picks the variant via :func:`pick_get_planning_status_variant`, composes the read-only
-    response from the session's cached state (never re-runs the validator), and flags the
-    one-shot side-effects: ``human_feedback_received`` clears the pending feedback;
+    Picks the variant via :func:`pick_get_planning_status_variant` and flags the one-shot
+    side-effects: ``human_feedback_received`` clears the pending feedback;
     ``phase_advanced_after_approve`` / ``human_rejected_no_feedback`` bump ``last_read_at``.
+
+    For the ``phase_status_report`` variant — the active-session poll body that renders
+    "gate {gate}, score {score}" — the caller re-validates and passes the fresh
+    ``spec_full`` + ``validator_output``; the gate is then recomputed through the SAME
+    :func:`evaluate_phase_gate_spec_wide` the CPS gate (``gate_currently_passing``) uses,
+    so the reported verdict matches what ``complete_planning_session`` would decide (the
+    cached ``session.last_gate_result`` can be stale — e.g. a reject re-activates a session
+    without resetting it). Every other variant (and the fallback when the spec could not be
+    loaded) composes from the session's cached state.
     """
 
     variant = pick_get_planning_status_variant(session)
@@ -632,9 +642,32 @@ def compose_get_planning_status(
         GuidanceVariant.PHASE_ADVANCED_AFTER_APPROVE,
         GuidanceVariant.HUMAN_REJECTED_NO_FEEDBACK,
     )
+    gate_result: PhaseGateResult | None = None
+    if (
+        variant == GuidanceVariant.PHASE_STATUS_REPORT
+        and spec_full is not None
+        and validator_output is not None
+        and validator_config is not None
+    ):
+        gate_result = evaluate_phase_gate_spec_wide(
+            current_phase=PlanningPhase(session.current_phase),
+            validator_output=validator_output,
+            spec_full=spec_full,
+            validator_config=validator_config,
+        )
+    else:
+        # Not the status-report body (or the spec could not be loaded / re-validated):
+        # keep the cached compose path — in particular ``human_feedback_received`` must
+        # NOT receive ``validator_output``, or it would lose its synthetic "apply the
+        # feedback" move.
+        spec_full = None
+        validator_output = None
     response = compose_response(
         variant=variant,
         session=session,
+        spec_full=spec_full,
+        validator_output=validator_output,
+        gate_result=gate_result,
         lifecycle_config=lifecycle_config,
         validator_config=validator_config,
     )

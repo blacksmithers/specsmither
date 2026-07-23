@@ -2,8 +2,11 @@
 
 Pure: ``(payload, ports) -> VerbResult``. The pipeline, in order:
 
-0. ``get_planning_status`` **short-circuits** before every mutation pre-check and
-   NEVER re-runs the validator (the poll/resume verb).
+0. ``get_planning_status`` **short-circuits** before every mutation pre-check (the
+   poll/resume verb). It never MUTATES the spec, but the ``phase_status_report`` body
+   re-validates live so its reported gate matches what ``complete_planning_session``
+   would decide (the cached ``last_gate_result`` can be stale); the other poll variants
+   compose from the cached state.
 1. the pre-check chain — ``operation_allowed`` → ``schema_validate`` → load
    ``spec_full`` → ``spec_status_check('aps')`` → ``count_bounds`` →
    ``cross_cut_references`` → ``cascade_rules`` → ``blueprint_epic_ratio`` → (for
@@ -37,6 +40,7 @@ from specsmither.lifecycle.gate import evaluate_phase_gate
 from specsmither.lifecycle.guidance.compose import (
     compose_get_planning_status,
     compose_response,
+    pick_get_planning_status_variant,
 )
 from specsmither.lifecycle.i18n import resolve_language
 from specsmither.lifecycle.operations_registry import (
@@ -90,7 +94,7 @@ from specsmither.lifecycle.write_plan import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from specsmither.lifecycle.ports import LifecyclePorts, SpecFull
+    from specsmither.lifecycle.ports import LifecyclePorts, SpecFull, ValidatorOutput
     from specsmither.lifecycle.session_record import PlanningSessionRecord
 
 
@@ -149,7 +153,8 @@ def action_planning_session(
         ports.config_store, project_id, session.specification_id
     )
 
-    # 0. get_planning_status — read-only poll/resume, NEVER re-validates.
+    # 0. get_planning_status — poll/resume, never mutates (the status-report body
+    #    re-validates live so its gate agrees with complete_planning_session).
     if operation == "get_planning_status":
         return _get_planning_status(
             ports,
@@ -296,8 +301,31 @@ def _get_planning_status(
     validator_config: Mapping[str, Any],
 ) -> VerbResult:
     _, now, clock = resolve_now(ports)
+
+    # The status-report body renders "gate {gate}, score {score}", so it must agree with
+    # what complete_planning_session would decide. The cached ``session.last_gate_result``
+    # can be stale (e.g. a reject re-activates a session without resetting it), so for that
+    # variant we RE-VALIDATE live and route the verdict through the SAME
+    # ``evaluate_phase_gate_spec_wide`` the CPS gate uses. Validation is in-process and
+    # cheap; the other poll variants keep composing from the cached state.
+    spec_full: SpecFull | None = None
+    validator_output: ValidatorOutput | None = None
+    if pick_get_planning_status_variant(session) == GuidanceVariant.PHASE_STATUS_REPORT:
+        spec_full = ports.spec_store.get_spec_full(session.specification_id)
+        if spec_full is not None:
+            validator_output = ports.validator.validate(
+                spec_full,
+                PlanningPhase(session.current_phase),
+                validator_config,
+                language=resolve_language(lifecycle_config),
+            )
+
     composition = compose_get_planning_status(
-        session, lifecycle_config=lifecycle_config, validator_config=validator_config
+        session,
+        spec_full=spec_full,
+        validator_output=validator_output,
+        lifecycle_config=lifecycle_config,
+        validator_config=validator_config,
     )
     snapshot = guidance_snapshot(composition.response)
 

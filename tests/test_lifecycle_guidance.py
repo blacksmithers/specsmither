@@ -314,3 +314,93 @@ def test_status_report_shows_phase_gate_fail_when_a_ticket_is_short() -> None:
     )
     assert resp.gate_result == "fail"
     assert "gate fail" in resp.guidance
+
+
+# --------------------------------------------------------------------------- #
+# compose_get_planning_status re-validates the phase_status_report body        #
+# (the cached last_gate_result can be stale — e.g. a reject re-activates a      #
+# session without resetting it — so the poll must agree with `complete`).      #
+# --------------------------------------------------------------------------- #
+
+
+def test_gps_status_report_revalidates_over_stale_cache() -> None:
+    # The session cached last_gate_result="pass", but a live re-validate fails (the
+    # structural floor: goals<3, while local_score is orthogonally 100). The status-report
+    # poll must report the FRESH verdict so it agrees with complete_planning_session.
+    session = _session(
+        current_phase=PlanningPhase.PLANNING_SPEC.value,
+        last_gate_result="pass",
+        last_score=100.0,
+        last_transition_at="2026-06-26T09:00:00Z",
+        last_read_at="2026-06-26T10:00:00Z",
+        last_transition_trigger="ai_agent",
+    )
+    output = ValidatorOutput(
+        gate_result="fail",  # composite passed=false (goals<3)
+        local_score=100.0,
+        per_epic_score={},
+        per_ticket_score={},
+        findings=[],
+        validated_phase=PlanningPhase.PLANNING_SPEC,
+    )
+    comp = compose_get_planning_status(
+        session,
+        spec_full=_spec_full_with_tickets("t1"),
+        validator_output=output,
+        validator_config=VALIDATOR_CONFIG,
+    )
+    assert comp.variant == GuidanceVariant.PHASE_STATUS_REPORT
+    assert comp.response.gate_result == "fail"  # live verdict, not the "pass" cache
+    assert comp.response.score == 100.0  # live score
+
+
+def test_gps_without_revalidation_still_reports_cached_gate() -> None:
+    # Without spec_full/validator_output (the spec could not be loaded) the poll falls back
+    # to the cached state — isolating the fix to the re-validated path.
+    session = _session(
+        current_phase=PlanningPhase.PLANNING_SPEC.value,
+        last_gate_result="pass",
+        last_score=100.0,
+        last_transition_at="2026-06-26T09:00:00Z",
+        last_read_at="2026-06-26T10:00:00Z",
+        last_transition_trigger="ai_agent",
+    )
+    comp = compose_get_planning_status(session, validator_config=VALIDATOR_CONFIG)
+    assert comp.variant == GuidanceVariant.PHASE_STATUS_REPORT
+    assert comp.response.gate_result == "pass"  # cached
+    assert comp.response.score == 100.0
+
+
+def test_gps_non_status_variant_ignores_passed_validator_output() -> None:
+    # spec/output passed for a NON-status variant must not reach compose_response, or the
+    # human_feedback_received variant would lose its synthetic "apply the feedback" move
+    # (it would instead derive moves from the leaked findings, e.g. update_spec).
+    session = _session(
+        pending_human_feedback={"content": "Tighten the goals.", "recordedAt": "x"},
+    )
+    output = ValidatorOutput(
+        gate_result="pass",
+        local_score=0.5,
+        per_epic_score={},
+        per_ticket_score={},
+        findings=[
+            ValidatorFinding(
+                category="rubric",
+                message="Spec goals are underspecified.",
+                severity="finding",
+                path="/spec/goals",  # maps to update_spec if it ever leaked
+            )
+        ],
+        validated_phase=PlanningPhase.EPIC_EXPANSION,
+    )
+    comp = compose_get_planning_status(
+        session,
+        spec_full=_spec_full_with_tickets("t1"),
+        validator_output=output,
+        validator_config=VALIDATOR_CONFIG,
+    )
+    assert comp.variant == GuidanceVariant.HUMAN_FEEDBACK_RECEIVED
+    # The synthetic move survives (epic_expansion default), proving no leak.
+    moves = comp.response.recommended_moves
+    assert [m.operation for m in moves] == ["update_epic"]
+    assert moves[0].rationale == "Apply the human's feedback to the relevant entity."

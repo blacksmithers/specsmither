@@ -404,6 +404,56 @@ def test_planning_loop_reaches_ready_through_the_real_gate(tmp_path: Path) -> No
     assert _count(factory, PlanningEntityScoreDatapoint, sid) > 0
 
 
+def test_get_planning_status_agrees_with_complete_over_a_stale_pass_cache(
+    tmp_path: Path,
+) -> None:
+    """Regression: the status poll and ``complete`` must agree about the gate.
+
+    The reported bug: ``get_planning_status`` composed the gate from the cached
+    ``session.last_gate_result`` and never re-validated, while ``complete`` always
+    re-validates. A stale ``last_gate_result='pass'`` (left, e.g., by a prior
+    ``complete`` that a human then rejected — reject re-activates the session WITHOUT
+    resetting the cache) made the poll report "gate pass" while ``complete`` denied on the
+    same live state. An agent trusting the poll loops forever. The fix: the
+    ``phase_status_report`` body re-validates live through the SAME phase-gate the CPS
+    check uses, so both verdicts match.
+    """
+    factory = _open(tmp_path)
+    # A structurally-incomplete spec: it fails the planning_spec gate LIVE (no goals /
+    # requirements floor), independent of any cached verdict.
+    spec_id = _seed_thin(factory, epics=0)
+    dispatcher = make_dispatcher(factory)
+
+    started = dispatcher.dispatch("start_planning_session", {"specId": spec_id})
+    assert started["agent_response"]["phase"] == "planning_spec"
+    sid = _session_id(factory, spec_id)
+
+    # Sanity: the live gate at planning_spec is genuinely failing.
+    assert _direct_gate(factory, spec_id, PlanningPhase.PLANNING_SPEC) == "fail"
+
+    # Inject the stale cache the bug depends on: an ACTIVE session whose cached gate says
+    # "pass" (score orthogonally high) though the live spec fails.
+    _set_session(factory, sid, status="active", last_gate_result="pass", last_score=100.0)
+
+    def agent_response(tool: str, payload: dict[str, Any]) -> dict[str, Any]:
+        result = dispatcher.dispatch(tool, payload)
+        assert result["kind"] == "lifecycle"
+        return cast("dict[str, Any]", result["agent_response"])
+
+    poll = agent_response(
+        "action_planning_session",
+        {"sessionId": sid, "operation": "get_planning_status"},
+    )
+    complete = agent_response("complete_planning_session", {"sessionId": sid})
+
+    # The poll re-validated and reports the FRESH verdict, not the "pass" cache — matching
+    # exactly what complete_planning_session decides.
+    assert poll["gate_result"] == "fail"
+    assert complete["outcome"] == "denied"
+    assert complete["gate_result"] == "fail"
+    assert poll["gate_result"] == complete["gate_result"]
+
+
 def test_decomposition_gate_tracks_crucible_result_passed(tmp_path: Path) -> None:
     """The corrected adapter: a binary phase's ``gate_result`` follows ``result.passed``.
 

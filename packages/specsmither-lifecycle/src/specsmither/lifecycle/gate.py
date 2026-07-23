@@ -359,7 +359,8 @@ def evaluate_phase_gate(
 # Spec-wide convenience — the gate as the CPS check + the guidance composer     #
 # evaluate it: EVERY entity of the phase's type, so the `*_expansion` verdict   #
 # is the spec-wide all-pass (not a touched subset). One home so the CPS gate    #
-# and the status-report guidance always report the SAME verdict.               #
+# and the status-report guidance always report the SAME verdict (the read-only  #
+# `get_planning_status` poll re-validates live and routes through here too).    #
 # --------------------------------------------------------------------------- #
 
 
