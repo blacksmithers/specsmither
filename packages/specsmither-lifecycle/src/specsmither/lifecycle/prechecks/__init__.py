@@ -54,6 +54,7 @@ from specsmither.lifecycle.prechecks.spec_status_check import (
     recovery_hint_for_status,
     spec_status_check,
 )
+from specsmither.lifecycle.prechecks.unknown_field_key import unknown_field_key
 
 __all__ = [
     "Accepted",
@@ -80,5 +81,6 @@ __all__ = [
     "run_dependencies_batch",
     "schema_validate",
     "spec_status_check",
+    "unknown_field_key",
     "validate_dependencies_batch",
 ]

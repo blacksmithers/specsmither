@@ -4,6 +4,29 @@ All notable changes to `specsmither-lifecycle` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.3
+
+Closes a silent-no-op hole in the `action` pre-check chain: a planning payload with an
+unrecognized key now denies instead of succeeding while writing nothing.
+
+### Fixed
+
+- **An unrecognized key in an `action` payload no longer silently no-ops.** The per-op
+  `schema_validate` models used Pydantic's default `extra="ignore"`, so an unknown
+  *top-level* key (a stray `type`, a typo, a payload wrapped under the wrong name) was
+  dropped before the write. Separately, an `update_*` `fields` map is typed
+  `dict[str, Any]`, so an unknown key *inside* it (a typo like `gaols`, a double-wrap
+  `{fields: {fields: {…}}}`) was snake-cased and `setattr`'d onto the `extra="allow"`
+  crucible model as a stray attribute while the real field stayed untouched. Both paths
+  reported `success` while writing nothing, the gate never moved, and the agent got no
+  corrective signal — the loop that pinned a spec at a stuck score. Two changes close
+  the hole: the `_Payload` base now uses `extra="forbid"` (the create ops gained the
+  optional `id` / `content` wire fields the projector already reads, so they still
+  validate), and a new `unknown_field_key` pre-check snake-cases each `fields` key and
+  denies any that is not a declared field of the target crucible model. A mis-shaped
+  payload is now a `Denied(invalid_payload)` that names the offending key; the
+  `fieldDeclarations` agent-wire field (stripped before the checks run) is unaffected.
+
 ## 0.4.2
 
 Fixes the counterpart gate-consistency bug on the mutating path: `action_planning_session`

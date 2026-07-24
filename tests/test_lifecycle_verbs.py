@@ -432,6 +432,65 @@ def test_aps_forbidden_op_denies(tmp_path: Path) -> None:
         assert denied[0].payload["deny_reason"] == "current_phase_must_finish_first"
 
 
+def test_aps_mis_wrapped_fields_key_is_denied_not_a_silent_noop(tmp_path: Path) -> None:
+    # A typo'd / mis-nested key INSIDE the fields map used to pass every gate and write
+    # NOTHING (a success no-op that left the score stuck and trapped the agent in a loop).
+    # It is now a corrective invalid_payload deny, raised before the pipeline re-validates.
+    factory = _open(tmp_path)
+    with factory.begin() as s:
+        _seed_base(s, spec_status="planning")
+        sid = _add_session(s, status="active", current_phase="planning_spec")
+
+    validator = _StubValidator()
+    response = run_verb(
+        factory,
+        LifecycleEvent(
+            verb="action",
+            payload={
+                "sessionId": sid,
+                "operation": "update_spec",
+                "payload": {"fields": {"gaols": ["a", "b", "c"]}},
+            },
+        ),
+        validator=validator,
+    )
+
+    assert response.outcome == "denied"
+    assert response.variant == GuidanceVariant.DENIED
+    assert validator.calls == []  # denied on the deterministic payload gate, before the pipeline
+
+    with factory.begin() as s:
+        denied = [a for a in _actions(s, sid) if a.outcome == "denied"]
+        assert any(a.operation == "update_spec" for a in denied)
+        assert denied[0].payload["deny_reason"] == "invalid_payload"
+
+
+def test_aps_unknown_top_level_key_is_denied(tmp_path: Path) -> None:
+    # extra="forbid": a stray top-level key (here a mis-sent discriminant) is a corrective
+    # deny, not a silently-dropped no-op — even though the required `fields` is present.
+    factory = _open(tmp_path)
+    with factory.begin() as s:
+        _seed_base(s, spec_status="planning")
+        sid = _add_session(s, status="active", current_phase="planning_spec")
+
+    validator = _StubValidator()
+    response = run_verb(
+        factory,
+        LifecycleEvent(
+            verb="action",
+            payload={
+                "sessionId": sid,
+                "operation": "update_spec",
+                "payload": {"fields": {"description": "d"}, "type": "update_spec"},
+            },
+        ),
+        validator=validator,
+    )
+
+    assert response.outcome == "denied"
+    assert validator.calls == []
+
+
 EPIC2_ID = "01EPIC000000000000000000B"
 
 

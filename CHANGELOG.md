@@ -4,6 +4,27 @@ All notable changes to `specsmither` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.3
+
+Closes a silent-no-op hole where an `action_planning_session` payload with an
+unrecognized key succeeded while writing nothing.
+Requires `specsmither-lifecycle >= 0.4.3`.
+
+### Fixed
+
+- **A mis-shaped `action_planning_session` payload is now denied instead of a phantom
+  success.** An unknown top-level key (a stray `type`, a typo, a whole payload wrapped
+  under the wrong name) was dropped by the schema layer, and an unknown key *inside* a
+  `fields` map was `setattr`'d onto the `extra="allow"` crucible model as a harmless
+  stray attribute — either way the operation reported `success` while the real field
+  stayed untouched, the score never moved, and the agent got no corrective signal (one
+  observed run turned ~21 of 24 `update_spec` calls into no-ops and trapped the agent in
+  an edit→complete loop). Payload validation now forbids unknown top-level keys, and a
+  new pre-check rejects any `fields` key that is not a writable field of the target
+  entity, so a mis-wrapped payload becomes a `Denied(invalid_payload)` that names the
+  offending key. The legit `fieldDeclarations` agent-wire field (stripped before
+  validation) still passes.
+
 ## 0.4.2
 
 Fixes the counterpart gate-consistency bug on the mutating path.

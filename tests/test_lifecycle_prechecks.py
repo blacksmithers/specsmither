@@ -43,6 +43,7 @@ from specsmither.lifecycle.prechecks import (
     run_dependencies_batch,
     schema_validate,
     spec_status_check,
+    unknown_field_key,
     validate_dependencies_batch,
 )
 
@@ -415,6 +416,64 @@ def test_schema_validate_get_planning_status_strict() -> None:
 
 def test_schema_validate_synthetic_op_accepted() -> None:
     assert schema_validate("start_planning_session", {"anything": True}) == Accepted()
+
+
+def test_schema_validate_forbids_unknown_top_level_key() -> None:
+    # extra="forbid": an unknown top-level key (a stray discriminant, a typo, a payload
+    # wrapped under the wrong key) is a corrective denial naming the key — never a silent drop.
+    denied = schema_validate("update_spec", {"fields": {}, "type": "update_spec"})
+    assert isinstance(denied, Denied)
+    assert denied.code == "invalid_payload"
+    assert denied.blockers is not None
+    assert any("type" in b for b in denied.blockers)
+
+    # The unwrapped shape (fields at top level) is likewise rejected, not silently dropped.
+    unwrapped = schema_validate("update_spec", {"goals": [1, 2, 3]})
+    assert isinstance(unwrapped, Denied)
+
+
+def test_schema_validate_tolerates_optional_create_wire_fields() -> None:
+    # Regression: extra="forbid" must NOT reject the optional wire fields the projector reads
+    # on create (a client-supplied id; create_blueprint's content) — they are declared optional.
+    assert schema_validate("create_epic", {"title": "E", "id": "e1"}) == Accepted()
+    assert schema_validate("create_ticket", {"epicId": "e1", "title": "T", "id": "t1"}) == Accepted()
+    assert (
+        schema_validate("create_blueprint", {"title": "B", "category": "c", "content": "x", "id": "b1"})
+        == Accepted()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# unknown_field_key — the inner ``fields``-map key gate                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_field_key_denies_typo_and_double_wrap() -> None:
+    # A typo'd key inside the fields map — the silent-no-op hole — is now a corrective deny.
+    typo = unknown_field_key("update_spec", {"fields": {"gaols": [1, 2, 3]}})
+    assert isinstance(typo, Denied)
+    assert typo.code == "invalid_payload"
+    assert typo.blockers is not None and any("gaols" in b for b in typo.blockers)
+    assert typo.context is not None and typo.context["unknown_fields"] == ["gaols"]
+
+    # The double-wrap {fields: {fields: {…}}} that passed every gate before.
+    double = unknown_field_key("update_spec", {"fields": {"fields": {"goals": [1]}}})
+    assert isinstance(double, Denied)
+    assert double.blockers is not None and any("fields.fields" in b for b in double.blockers)
+
+
+def test_unknown_field_key_accepts_known_fields_camel_or_snake() -> None:
+    # Recognized attributes pass in either the camelCase wire form or snake_case.
+    assert unknown_field_key("update_spec", {"fields": {"nonFunctionalRequirements": []}}) == Accepted()
+    assert unknown_field_key("update_epic", {"fields": {"apiContracts": []}}) == Accepted()
+    assert unknown_field_key("update_epic", {"fields": {"api_contracts": []}}) == Accepted()
+    assert unknown_field_key("update_ticket", {"fields": {"implementationSteps": []}}) == Accepted()
+
+
+def test_unknown_field_key_is_a_noop_off_the_update_ops_or_without_fields() -> None:
+    # Non-update ops and a missing/mistyped fields map are schema_validate's job, not this gate's.
+    assert unknown_field_key("create_epic", {"title": "E", "bogus": 1}) == Accepted()
+    assert unknown_field_key("update_spec", {"nope": 1}) == Accepted()
 
 
 # --------------------------------------------------------------------------- #
