@@ -73,6 +73,7 @@ from specsmither.lifecycle.prechecks import (
     run_dependencies_batch,
     schema_validate,
     spec_status_check,
+    unknown_field_key,
 )
 from specsmither.lifecycle.prechecks.cross_val_file_redirect import cross_val_file_redirect
 from specsmither.lifecycle.prechecks.strip_field_declarations import (
@@ -206,11 +207,13 @@ def action_planning_session(
     if isinstance(schema_result, Denied):
         return _denied(ports, session, operation, op_payload, schema_result, user_id, lifecycle_config, validator_config)
 
-    # payload-only shape + enum-poison guards (off-enum apiContract type,
-    # content-less structure, off-enum nfr/guardrail/techStack/goal/requirement values) run
-    # before the spec_full load, alongside schema_validate. Without these an off-enum value
-    # crashes the typed write boundary as an opaque INTERNAL error the agent can't recover from.
+    # payload-only shape + enum-poison guards (unrecognized fields-map key, off-enum
+    # apiContract type, content-less structure, off-enum nfr/guardrail/techStack/goal/
+    # requirement values) run before the spec_full load, alongside schema_validate. Without
+    # these an unknown key silently no-ops the edit, and an off-enum value crashes the typed
+    # write boundary as an opaque INTERNAL error the agent can't recover from.
     for payload_check in (
+        unknown_field_key(operation, op_payload or {}),
         field_shape_soft_deny(operation, op_payload or {}),
         enum_field_guards(operation, op_payload or {}),
         content_shape_valid(operation, op_payload or {}),

@@ -8,8 +8,16 @@ Shape rules:
 
 * Synthetic / audit-only ops and any op without a registered schema → accept
   (no validation).
-* Payload models **strip** unknown keys (``extra='ignore'``) — except
-  ``get_planning_status``, which forbids any key (``extra='forbid'``).
+* Payload models **forbid** unknown top-level keys (``extra='forbid'``): a key the
+  operation does not consume (a typo, a mis-wrapped ``{fields: …}`` under the wrong
+  key, a stray ``type``) is a :class:`Denied` (``invalid_payload``) that names the
+  offending key — never a silently-dropped no-op. Every wire key an operation
+  actually reads (including the optional ``id`` a create op tolerates, and
+  ``create_blueprint``'s optional ``content``) is declared here, so the schema is the
+  honest source of truth for what the op consumes. The agent-wire ``fieldDeclarations``
+  is stripped BEFORE this runs (``strip_agent_wire_field_declarations``), so ``forbid``
+  never trips on it. Unknown keys *inside* an ``update_*`` ``fields`` map are a separate
+  gate (:func:`~specsmither.lifecycle.prechecks.unknown_field_key.unknown_field_key`).
 * Non-empty strings use ``min_length=1``; non-empty arrays use ``min_length=1``;
   ``create_dependencies.dependencies`` keeps the ``max_length=5000`` cap.
 
@@ -50,9 +58,15 @@ _NonEmptyStr = Annotated[str, StringConstraints(min_length=1)]
 
 
 class _Payload(BaseModel):
-    """Base for the payload models — unknown keys stripped (Zod default)."""
+    """Base for the payload models — unknown top-level keys are rejected (``extra='forbid'``).
 
-    model_config = ConfigDict(extra="ignore")
+    A key the operation does not consume is an agent error (a typo, a mis-wrapped payload,
+    a stray discriminant): rejecting it yields a corrective ``invalid_payload`` deny instead
+    of silently dropping the key and running a no-op mutation. Every wire key an op actually
+    reads is declared on its model, so ``forbid`` never rejects a legitimate field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class _UpdateSpecPayload(_Payload):
@@ -62,6 +76,9 @@ class _UpdateSpecPayload(_Payload):
 class _CreateEpicPayload(_Payload):
     title: _NonEmptyStr
     description: str | None = None
+    # The projector tolerates a client-supplied id on create (operations_projector.py);
+    # declared optional so ``extra='forbid'`` keeps it rather than rejecting it.
+    id: _NonEmptyStr | None = None
 
 
 class _UpdateEpicPayload(_Payload):
@@ -82,6 +99,8 @@ class _CreateTicketPayload(_Payload):
     # NOT writable on update_ticket, so a type-flip can't rebalance the impl:verification
     # ratio past an already-passed ticket_decomposition gate.
     ticketType: Literal["implementation", "verification"] | None = None
+    # Optional client-supplied id the projector tolerates on create (see _CreateEpicPayload).
+    id: _NonEmptyStr | None = None
 
 
 class _UpdateTicketPayload(_Payload):
@@ -97,6 +116,9 @@ class _DeleteTicketPayload(_Payload):
 class _CreateBlueprintPayload(_Payload):
     title: _NonEmptyStr
     category: _NonEmptyStr
+    # content + id are optional wire fields the projector reads on create_blueprint.
+    content: str | None = None
+    id: _NonEmptyStr | None = None
 
 
 class _UpdateBlueprintPayload(_Payload):
@@ -144,8 +166,8 @@ class _UnjustifyPayload(_Payload):
     entityId: _NonEmptyStr
 
 
-class _GetPlanningStatusPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class _GetPlanningStatusPayload(_Payload):
+    """A read-only poll — no payload fields; any key is rejected (inherited ``forbid``)."""
 
 
 #: Per-operation payload models (the deny-gate). Ops absent here are accepted.
